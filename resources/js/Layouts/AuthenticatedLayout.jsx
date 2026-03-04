@@ -3,8 +3,10 @@ import { Link, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 
 export default function AuthenticatedLayout({ header, children }) {
-    const user = usePage().props.auth.user;
+    const { props, url } = usePage();
+    const user = props.auth.user;
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const isProjectsOrCategories = route().current('projects.*') || url.includes('/categories');
 
     return (
         <div className="min-h-screen bg-[#F3F4F8] flex" style={{ fontFamily: "'Inter', sans-serif" }}>
@@ -60,12 +62,12 @@ export default function AuthenticatedLayout({ header, children }) {
 
                     <Link
                         href={route('projects.index')}
-                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all ${route().current('projects.*') || route().current('categories.*')
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all ${isProjectsOrCategories
                             ? 'bg-[#EEF2FF] text-[#5340FF]'
                             : 'text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827]'
                             }`}
                     >
-                        <svg className={`w-[18px] h-[18px] shrink-0 ${route().current('projects.*') || route().current('categories.*') ? 'text-[#5340FF]' : 'text-[#9CA3AF]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className={`w-[18px] h-[18px] shrink-0 ${isProjectsOrCategories ? 'text-[#5340FF]' : 'text-[#9CA3AF]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                         </svg>
                         Archivos en Drive
@@ -82,6 +84,19 @@ export default function AuthenticatedLayout({ header, children }) {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                         </svg>
                         Personal
+                    </Link>
+
+                    <Link
+                        href={route('courses.index')}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all ${route().current('courses.*')
+                            ? 'bg-[#EEF2FF] text-[#5340FF]'
+                            : 'text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827]'
+                            }`}
+                    >
+                        <svg className={`w-[18px] h-[18px] shrink-0 ${route().current('courses.*') ? 'text-[#5340FF]' : 'text-[#9CA3AF]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                        </svg>
+                        Cursos
                     </Link>
                 </nav>
 

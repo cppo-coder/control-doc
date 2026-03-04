@@ -4,6 +4,10 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\DocumentCategoryController;
 use App\Http\Controllers\DocumentController;
+use App\Models\Project;
+use App\Models\Worker;
+use App\Models\Course;
+use App\Models\Document;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -17,9 +21,10 @@ Route::get('/', function () {
     ]);
 });
 
-Route::get('/dashboard', function () {
-    return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+Route::get('/dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])
+    ->middleware(['auth', 'verified'])
+    ->name('dashboard');
+
 
 Route::middleware('auth')->group(function () {
 
@@ -45,11 +50,17 @@ Route::middleware('auth')->group(function () {
     Route::post('/categories/{category}/documents', [DocumentController::class, 'store'])->name('documents.store');
     Route::delete('/documents/{document}', [DocumentController::class, 'destroy'])->name('documents.destroy');
 
-    // Health PDF analysis
-    Route::post('/documents/{document}/analyze', [\App\Http\Controllers\DocumentAnalysisController::class, 'analyze'])->name('documents.analyze');
+    // Health PDF analysis — Rate limited: 10 análisis por minuto por usuario
+    Route::middleware('throttle:10,1')->group(function () {
+        Route::post('/documents/{document}/analyze', [\App\Http\Controllers\DocumentAnalysisController::class, 'analyze'])->name('documents.analyze');
+        Route::post('/document-categories/{category}/bulk-analyze', [\App\Http\Controllers\DocumentAnalysisController::class, 'bulkAnalyze'])->name('documents.bulk-analyze');
+    });
 
     // Personnel (Personal)
     Route::resource('workers', \App\Http\Controllers\WorkerController::class)->names('workers');
+
+    // Courses (Cursos)
+    Route::resource('courses', \App\Http\Controllers\CourseController::class)->names('courses');
 });
 
 require __DIR__ . '/auth.php';

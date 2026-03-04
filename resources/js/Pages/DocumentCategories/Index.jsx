@@ -3,6 +3,14 @@ import { Head, useForm, router, Link, usePoll } from '@inertiajs/react';
 import InputError from '@/Components/InputError';
 import { useConfirm } from '@/Components/ConfirmModal';
 import { useState, useRef, useEffect } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
+
+// Ayudante para detectar carpetas de examen de forma robusta e ignorar acentos
+const isExamenFolder = (name) => {
+    if (!name) return false;
+    return name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('examen');
+};
 
 export default function Index({ project, categories }) {
     const { data, setData, post, processing, errors, reset } = useForm({ name: '' });
@@ -125,6 +133,87 @@ export default function Index({ project, categories }) {
     );
 }
 
+/** 
+ * Botón para realizar análisis masivo en una carpeta específica.
+ * Aparece solo si la carpeta contiene la palabra 'examen' (con o sin acento)
+ * y existen documentos pendientes o con error.
+ */
+function BulkAnalyzeButton({ category }) {
+    const [analyzing, setAnalyzing] = useState(false);
+    const [progress, setProgress] = useState({ current: 0, total: 0 });
+
+    const runBulkAnalysis = async () => {
+        // Obtenemos los documentos que necesitan análisis
+        const toAnalyze = category.documents.filter(d =>
+            !d.analysis_status || d.analysis_status === 'pending' || d.analysis_status === 'error'
+        );
+
+        if (toAnalyze.length === 0) return;
+
+        setAnalyzing(true);
+        setProgress({ current: 0, total: toAnalyze.length });
+
+        for (let i = 0; i < toAnalyze.length; i++) {
+            const doc = toAnalyze[i];
+            setProgress({ current: i + 1, total: toAnalyze.length });
+
+            try {
+                // Usamos axios que es más robusto y maneja el CSRF automáticamente
+                await axios.post(route('documents.analyze', doc.id));
+
+                // Esperar 4 segundos (para cumplir con 15 RPM de Free Tier de Gemini)
+                if (i < toAnalyze.length - 1) {
+                    await new Promise(r => setTimeout(r, 4000));
+                }
+            } catch (e) {
+                console.error("Bulk analysis error", e);
+            }
+        }
+
+        setAnalyzing(false);
+        // Recargar solo los datos de categorías al finalizar para reflejar los resultados
+        router.reload({ only: ['categories'], preserveScroll: true });
+    };
+
+    // Verificamos si la categoría es de examen de manera robusta
+    if (!isExamenFolder(category.name)) return null;
+
+    // Verificamos si hay archivos que requieran acción
+    const hasPending = category.documents.some(d =>
+        !d.analysis_status || d.analysis_status === 'pending' || d.analysis_status === 'error'
+    );
+
+    if (!hasPending && !analyzing) return null;
+
+    return (
+        <button
+            onClick={runBulkAnalysis}
+            disabled={analyzing}
+            className={`h-11 px-5 rounded-xl text-[10px] font-extrabold uppercase tracking-widest transition flex items-center gap-2 shadow-sm whitespace-nowrap
+                ${analyzing
+                    ? 'bg-amber-100 text-amber-600 border border-amber-200 cursor-wait'
+                    : 'bg-[#FFB800] hover:bg-[#F2AE00] text-white shadow-amber-100 ring-4 ring-[#FFB800]/10'}`}
+        >
+            {analyzing ? (
+                <>
+                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                    PROCESANDO ({progress.current}/{progress.total})
+                </>
+            ) : (
+                <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Análisis Masivo
+                </>
+            )}
+        </button>
+    );
+}
+
 function CategoryRow({ category, index }) {
     const [editing, setEditing] = useState(false);
     const [name, setName] = useState(category.name);
@@ -217,7 +306,10 @@ function CategoryRow({ category, index }) {
                         </button>
                     </div>
                 </div>
-                <UploadDocumentForm category={category} />
+                <div className="flex items-center gap-2 shrink-0">
+                    <BulkAnalyzeButton category={category} />
+                    <UploadDocumentForm category={category} isExamen={isExamenFolder(category.name)} />
+                </div>
             </div>
 
             {/* Lista de documentos — controlada por open */}
@@ -227,7 +319,7 @@ function CategoryRow({ category, index }) {
                         <DocumentRow
                             key={doc.id}
                             doc={doc}
-                            isExamenFolder={category.name.toLowerCase().includes('examen')}
+                            category={category}
                         />
                     ))}
                 </div>
@@ -245,157 +337,263 @@ function CategoryRow({ category, index }) {
 
 
 function UploadDocumentForm({ category }) {
-    const [files, setFiles] = useState([]);
-    const [phase, setPhase] = useState('idle'); // 'idle' | 'ready' | 'uploading' | 'done'
-    const [current, setCurrent] = useState(0);
-    const [fileResults, setFileResults] = useState([]); // { name, ok, error? }
-
-    const prevCountRef = useRef(category.documents.length);
-
+    const [open, setOpen] = useState(false);
+    const [fileStates, setFileStates] = useState([]); // { file, progress, status: 'waiting'|'uploading'|'done'|'error' }
+    const [dragging, setDragging] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const inputRef = useRef(null);
 
     const getCsrf = () => {
         const m = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
         return m ? decodeURIComponent(m[1]) : '';
     };
 
-    const onFilesChange = (e) => {
-        const selected = Array.from(e.target.files);
-        if (selected.length === 0) return;
-        setFiles(selected);
-        setPhase('ready');
-        setFileResults([]);
+    const addFiles = (selected) => {
+        const pdfs = Array.from(selected).filter(f => f.type === 'application/pdf' || f.name.endsWith('.pdf'));
+        if (!pdfs.length) return;
+        setFileStates(prev => [
+            ...prev,
+            ...pdfs.map(file => ({ file, progress: 0, status: 'waiting', error: null })),
+        ]);
     };
 
+    const onFilesChange = (e) => { addFiles(e.target.files); if (inputRef.current) inputRef.current.value = ''; };
+    const onDragOver = (e) => { e.preventDefault(); setDragging(true); };
+    const onDragLeave = (e) => { e.preventDefault(); setDragging(false); };
+    const onDrop = (e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); };
+
+    const removeFile = (idx) => setFileStates(prev => prev.filter((_, i) => i !== idx));
+
+    const uploadFile = (item, idx) => new Promise(resolve => {
+        const fd = new FormData();
+        fd.append('document', item.file);
+        const xhr = new XMLHttpRequest();
+        xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable)
+                setFileStates(prev => prev.map((f, i) => i === idx ? { ...f, progress: Math.round((e.loaded / e.total) * 100) } : f));
+        };
+        xhr.onload = () => {
+            const ok = xhr.status >= 200 && xhr.status < 300;
+            let errMsg = null;
+            try { const j = JSON.parse(xhr.responseText); errMsg = j.errors?.document?.[0] ?? null; } catch (_) { }
+            setFileStates(prev => prev.map((f, i) => i === idx ? { ...f, progress: 100, status: ok ? 'done' : 'error', error: errMsg } : f));
+            resolve();
+        };
+        xhr.onerror = () => {
+            setFileStates(prev => prev.map((f, i) => i === idx ? { ...f, status: 'error', error: 'Error de red' } : f));
+            resolve();
+        };
+        xhr.open('POST', route('documents.store', category.id));
+        xhr.setRequestHeader('Accept', 'application/json');
+        xhr.setRequestHeader('X-XSRF-TOKEN', getCsrf());
+        xhr.withCredentials = true;
+        setFileStates(prev => prev.map((f, i) => i === idx ? { ...f, status: 'uploading' } : f));
+        xhr.send(fd);
+    });
+
     const startUpload = async () => {
-        setPhase('uploading');
-        setCurrent(0);
-        const results = [];
+        setUploading(true);
+        const waiting = fileStates.map((f, i) => ({ ...f, _idx: i })).filter(f => f.status === 'waiting');
 
-        for (let i = 0; i < files.length; i++) {
-            setCurrent(i + 1);
-            const fd = new FormData();
-            fd.append('document', files[i]);
+        for (let j = 0; j < waiting.length; j++) {
+            const item = waiting[j];
+            await uploadFile(item, item._idx);
 
-            try {
-                const res = await fetch(route('documents.store', category.id), {
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-XSRF-TOKEN': getCsrf(),
-                    },
-                    credentials: 'same-origin',
-                    body: fd,
-                });
-                const json = await res.json();
-                results.push({ name: files[i].name, ok: res.ok, error: json.errors?.document?.[0] ?? null });
-            } catch (err) {
-                results.push({ name: files[i].name, ok: false, error: err.message });
+            // Si no es el último archivo, esperar 2 segundos para no saturar la cuota de la API
+            if (j < waiting.length - 1) {
+                await new Promise(r => setTimeout(r, 2000));
             }
-            setFileResults([...results]);
         }
 
-        setPhase('done');
-        // Refrescar Inertia para que el sidebar muestre los nuevos documentos
+        setUploading(false);
         router.reload({ preserveScroll: true });
     };
 
-    const reset = () => {
-        setFiles([]); setPhase('idle'); setCurrent(0); setFileResults([]);
-        const el = document.getElementById(`bulk-${category.id}`);
-        if (el) el.value = '';
-    };
+    const hasPending = fileStates.some(f => f.status === 'waiting');
+    const allDone = fileStates.length > 0 && fileStates.every(f => f.status === 'done' || f.status === 'error');
 
-    useEffect(() => {
-        // Si se eliminaron elementos (el conteo bajó), limpiamos el estado de "recientemente subido"
-        if (category.documents.length < prevCountRef.current) {
-            if (phase === 'done') {
-                reset();
-            }
-        }
-        prevCountRef.current = category.documents.length;
-    }, [category.documents.length, phase, reset]);
+    const handleClose = () => { if (uploading) return; setOpen(false); setFileStates([]); setDragging(false); };
 
     return (
-        <div className="flex items-center gap-2 shrink-0">
-            {/* Input oculto multi-file */}
-            <input
-                id={`bulk-${category.id}`}
-                type="file"
-                accept=".pdf"
-                multiple
-                onChange={onFilesChange}
-                className="hidden"
-            />
+        <>
+            {/* Trigger */}
+            <button
+                onClick={() => setOpen(true)}
+                className="h-9 px-4 flex items-center gap-1.5 bg-[#EEF2FF] hover:bg-indigo-100 text-[#5340FF] text-[10px] font-extrabold uppercase tracking-widest rounded-xl transition whitespace-nowrap"
+            >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                Agregar PDF
+            </button>
 
-            {/* IDLE — botón inicial */}
-            {phase === 'idle' && (
-                <label
-                    htmlFor={`bulk-${category.id}`}
-                    className="cursor-pointer h-9 px-4 flex items-center gap-1.5 bg-[#EEF2FF] hover:bg-indigo-100 text-[#5340FF] text-[10px] font-extrabold uppercase tracking-widest rounded-xl transition whitespace-nowrap"
+            {/* Modal */}
+            {open && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+                    onClick={(e) => e.target === e.currentTarget && handleClose()}
                 >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                    </svg>
-                    Agregar PDF
-                </label>
-            )}
+                    <div className="bg-white rounded-[28px] shadow-2xl w-full max-w-md flex flex-col overflow-hidden border border-[#EAECF0]">
 
-            {/* READY — archivos seleccionados, mostrar contador + botones */}
-            {phase === 'ready' && (
-                <>
-                    <span className="text-[11px] font-semibold text-[#6B7280] whitespace-nowrap">
-                        {files.length} archivo{files.length > 1 ? 's' : ''} seleccionado{files.length > 1 ? 's' : ''}
-                    </span>
-                    <button
-                        onClick={startUpload}
-                        className="h-9 px-4 bg-[#5340FF] hover:bg-[#4330E0] text-white text-[10px] font-extrabold uppercase tracking-widest rounded-xl transition shadow-sm shadow-indigo-200 flex items-center gap-1.5 whitespace-nowrap"
-                    >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
-                        </svg>
-                        Subir
-                    </button>
-                    <button onClick={reset} className="w-9 h-9 flex items-center justify-center rounded-xl bg-[#F3F4F6] text-[#6B7280] hover:bg-[#E5E7EB] transition">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                </>
-            )}
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-[#F3F4F6]">
+                            <div>
+                                <h2 className="text-[13px] font-extrabold text-[#111827] uppercase tracking-widest">Subir PDFs</h2>
+                                <p className="text-[11px] text-[#9CA3AF] mt-0.5">{category.name}</p>
+                            </div>
+                            {!uploading && (
+                                <button onClick={handleClose} className="w-8 h-8 flex items-center justify-center rounded-xl bg-[#F3F4F6] text-[#6B7280] hover:bg-[#E5E7EB] transition">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
+                            )}
+                        </div>
 
-            {/* UPLOADING — spinner + contador */}
-            {phase === 'uploading' && (
-                <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-[#5340FF] animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                    </svg>
-                    <span className="text-[11px] font-bold text-[#6B7280] whitespace-nowrap">
-                        {current}/{files.length} subiendo…
-                    </span>
+                        {/* Body */}
+                        <div className="p-6 space-y-5 max-h-[65vh] overflow-y-auto">
+
+                            {/* Drop Zone */}
+                            <div
+                                onDragOver={onDragOver}
+                                onDragLeave={onDragLeave}
+                                onDrop={onDrop}
+                                className={`flex flex-col items-center justify-center gap-4 py-10 rounded-2xl border-2 border-dashed transition-all ${dragging ? 'border-[#5340FF] bg-[#EEF2FF] scale-[1.01]' : 'border-[#D1D5DB] bg-[#FAFAFA] hover:border-[#5340FF] hover:bg-[#F5F5FF]'
+                                    }`}
+                            >
+                                {/* Cloud SVG */}
+                                <svg width="60" height="50" viewBox="0 0 60 50" fill="none" className={`transition-transform ${dragging ? 'scale-110' : ''}`}>
+                                    <ellipse cx="30" cy="44" rx="22" ry="4" fill="#E0E7FF" />
+                                    <path d="M16 34C11 34 7 30 7 25c0-4.2 2.8-7.7 6.7-8.8A15 15 0 0130 7a15 15 0 0114.8 19.5H46c3.6 0 6.5 2.9 6.5 6.5S49.6 39.5 46 39.5H16z" fill="url(#cg)" />
+                                    <path d="M30 22v14M24 28l6-6 6 6" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                                    <defs>
+                                        <linearGradient id="cg" x1="7" y1="7" x2="52" y2="44" gradientUnits="userSpaceOnUse">
+                                            <stop stopColor="#818CF8" />
+                                            <stop offset="1" stopColor="#5340FF" />
+                                        </linearGradient>
+                                    </defs>
+                                </svg>
+
+                                <div className="text-center">
+                                    <p className="text-[13px] font-bold text-[#374151]">
+                                        {dragging ? 'Suelta los archivos aquí' : 'Arrastra y suelta tus PDFs aquí'}
+                                    </p>
+                                    {!dragging && <p className="text-[12px] font-bold text-[#9CA3AF] mt-1">O</p>}
+                                </div>
+
+                                {!dragging && (
+                                    <button
+                                        onClick={() => inputRef.current?.click()}
+                                        className="h-9 px-6 bg-[#5340FF] hover:bg-[#4330E0] text-white text-[11px] font-extrabold uppercase tracking-widest rounded-xl transition shadow-md shadow-indigo-200"
+                                    >
+                                        Seleccionar Archivos
+                                    </button>
+                                )}
+
+                                <input ref={inputRef} type="file" accept=".pdf" multiple onChange={onFilesChange} className="hidden" />
+                            </div>
+
+                            {/* File list */}
+                            {fileStates.length > 0 && (
+                                <div className="space-y-2">
+                                    <p className="text-[10px] font-extrabold text-[#9CA3AF] uppercase tracking-widest">Archivos seleccionados</p>
+                                    {fileStates.map((item, idx) => (
+                                        <div key={idx} className="flex items-center gap-3 bg-[#F9FAFB] border border-[#EAECF0] rounded-2xl px-4 py-3">
+
+                                            {/* Estado icono */}
+                                            <div className="shrink-0 w-8 h-8 flex items-center justify-center">
+                                                {item.status === 'waiting' && <div className="w-7 h-7 rounded-full border-2 border-[#D1D5DB]" />}
+                                                {item.status === 'uploading' && (
+                                                    <svg className="w-7 h-7 text-[#5340FF] animate-spin" fill="none" viewBox="0 0 24 24">
+                                                        <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                                                        <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                                                    </svg>
+                                                )}
+                                                {item.status === 'done' && (
+                                                    <div className="w-7 h-7 rounded-full bg-[#5340FF] flex items-center justify-center">
+                                                        <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                    </div>
+                                                )}
+                                                {item.status === 'error' && (
+                                                    <div className="w-7 h-7 rounded-full bg-red-100 flex items-center justify-center">
+                                                        <svg className="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Nombre + barra */}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center justify-between mb-1.5">
+                                                    <span className="text-[12px] font-semibold text-[#374151] truncate max-w-[170px]">{item.file.name}</span>
+                                                    <span className="text-[11px] font-bold text-[#5340FF] ml-2 shrink-0">
+                                                        {item.status === 'error' ? 'Error' : `${item.status === 'done' ? 100 : item.progress}%`}
+                                                    </span>
+                                                </div>
+                                                <div className="w-full h-1.5 bg-[#E5E7EB] rounded-full overflow-hidden">
+                                                    <div
+                                                        className={`h-full rounded-full transition-all duration-300 ${item.status === 'error' ? 'bg-red-400' : 'bg-[#5340FF]'}`}
+                                                        style={{ width: `${item.status === 'done' ? 100 : item.progress}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Quitar */}
+                                            {!uploading && item.status !== 'uploading' && (
+                                                <button onClick={() => removeFile(idx)} className="shrink-0 w-6 h-6 flex items-center justify-center text-[#D1D5DB] hover:text-[#6B7280] transition">
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        {fileStates.length > 0 && (
+                            <div className="px-6 py-4 border-t border-[#F3F4F6] flex items-center justify-between gap-3">
+                                {allDone ? (
+                                    <>
+                                        <span className="text-[11px] font-bold text-green-600">
+                                            {fileStates.filter(f => f.status === 'done').length} archivo{fileStates.filter(f => f.status === 'done').length !== 1 ? 's' : ''} subido{fileStates.filter(f => f.status === 'done').length !== 1 ? 's' : ''}
+                                        </span>
+                                        <button onClick={handleClose} className="h-9 px-6 bg-[#5340FF] hover:bg-[#4330E0] text-white text-[11px] font-extrabold uppercase tracking-widest rounded-xl transition">
+                                            Cerrar
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="text-[11px] text-[#9CA3AF]">
+                                            {fileStates.filter(f => f.status === 'waiting').length} pendiente{fileStates.filter(f => f.status === 'waiting').length !== 1 ? 's' : ''}
+                                        </span>
+                                        <button
+                                            onClick={startUpload}
+                                            disabled={uploading || !hasPending}
+                                            className="h-9 px-6 bg-[#5340FF] hover:bg-[#4330E0] disabled:opacity-50 text-white text-[11px] font-extrabold uppercase tracking-widest rounded-xl transition flex items-center gap-2"
+                                        >
+                                            {uploading && (
+                                                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                                                </svg>
+                                            )}
+                                            {uploading ? 'Subiendo…' : 'Subir todo'}
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
-
-            {/* DONE — resumen de éxito/error */}
-            {phase === 'done' && (
-                <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-extrabold text-green-600 bg-green-50 px-2.5 py-1 rounded-full uppercase tracking-widest">
-                        {fileResults.filter(r => r.ok).length}/{files.length} subidos
-                    </span>
-                    {fileResults.some(r => !r.ok) && (
-                        <span className="text-[10px] font-extrabold text-red-500 bg-red-50 px-2.5 py-1 rounded-full uppercase tracking-widest">
-                            {fileResults.filter(r => !r.ok).length} error{fileResults.filter(r => !r.ok).length > 1 ? 'es' : ''}
-                        </span>
-                    )}
-                    <button onClick={reset} className="text-[10px] font-bold text-[#9CA3AF] hover:text-[#6B7280] underline">nuevo</button>
-                </div>
-            )}
-        </div>
+        </>
     );
 }
 
 
 /* ─── Mapa de estilos por estado ─── */
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
 
 const STATUS = {
     pending: { bg: 'bg-gray-100', text: 'text-gray-500', label: 'Pendiente', dot: 'bg-gray-400' },
@@ -407,7 +605,7 @@ const STATUS = {
     analyzing: { bg: 'bg-indigo-50', text: 'text-indigo-600', label: 'Analizando...', dot: 'bg-indigo-400 animate-pulse' },
 };
 
-function DocumentRow({ doc, isExamenFolder }) {
+function DocumentRow({ doc, category }) {
     const [open, setOpen] = useState(false);
     const { confirmModal, askConfirm } = useConfirm();
     const queryClient = useQueryClient();
@@ -457,32 +655,35 @@ function DocumentRow({ doc, isExamenFolder }) {
 
                 <div className="flex items-center gap-2 shrink-0">
                     {/* Badge estado */}
-                    {isExamenFolder && (
+                    {isExamenFolder(category.name) && (
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest ${st.bg} ${st.text}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`}></span>
                             {st.label}
                         </span>
                     )}
 
-                    {/* Botón Analizar */}
-                    {isExamenFolder && (
+                    {/* Botón Analizar / Re-analizar */}
+                    {isExamenFolder(category.name) && (
                         <button
                             onClick={analyze}
                             disabled={isPending}
-                            title="Analizar con IA"
-                            className="h-8 px-3 flex items-center gap-1.5 bg-[#5340FF] hover:bg-[#4330E0] text-white text-[10px] font-extrabold uppercase tracking-widest rounded-xl transition disabled:opacity-50 whitespace-nowrap shadow-sm shadow-indigo-200"
+                            title={doc.analysis_status === 'error' ? 'Re-intentar análisis' : 'Analizar con IA'}
+                            className={`h-8 px-3 flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest rounded-xl transition disabled:opacity-50 whitespace-nowrap shadow-sm 
+                                ${doc.analysis_status === 'error'
+                                    ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-100'
+                                    : 'bg-[#5340FF] hover:bg-[#4330E0] text-white shadow-indigo-100'}`}
                         >
                             {isPending ? (
-                                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                                 </svg>
                             ) : (
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
                                 </svg>
                             )}
-                            Analizar
+                            {doc.analysis_status === 'error' ? 'Re-intentar' : (doc.analysis_status && doc.analysis_status !== 'pending' ? 'Re-analizar' : 'Analizar')}
                         </button>
                     )}
 
@@ -697,8 +898,8 @@ function BulkUploadModal({ project, onClose }) {
     const totalOk = results.filter(r => r.status === 'clean').length;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm">
-            <div className="bg-white rounded-[28px] shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden border border-[#EAECF0]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0B0F19]/60 backdrop-blur-[6px] transition-all duration-300">
+            <div className="bg-white rounded-[32px] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.18)] w-full max-w-xl lg:max-w-2xl max-h-[90vh] flex flex-col overflow-hidden border border-[#EAECF0] animate-in fade-in zoom-in-95 duration-200">
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-7 py-5 border-b border-[#F3F4F6] bg-[#FAFAFA] shrink-0">
@@ -944,3 +1145,4 @@ function ResultsTable({ results, partial = false }) {
         </div>
     );
 }
+

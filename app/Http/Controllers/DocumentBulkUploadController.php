@@ -190,7 +190,7 @@ PROMPT;
 
         try {
             $response = Http::timeout(60)->post(
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={$apiKey}",
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key={$apiKey}",
                 [
                     'contents'         => [['parts' => [['text' => $prompt]]]],
                     'generationConfig' => ['temperature' => 0.1, 'responseMimeType' => 'application/json'],

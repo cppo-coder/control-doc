@@ -32,7 +32,15 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
             'auth' => [
-                'user' => $request->user(),
+                // Solo campos necesarios — evita serializar password hash, remember_token, etc.
+                'user' => $request->user()?->only([
+                    'id', 'name', 'email', 'email_verified_at',
+                ]),
+            ],
+            // Flash messages globales para toasts
+            'flash' => [
+                'success' => $request->session()->get('success'),
+                'error'   => $request->session()->get('error'),
             ],
         ];
     }

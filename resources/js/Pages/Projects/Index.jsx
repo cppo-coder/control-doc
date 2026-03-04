@@ -1,6 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, useForm, router } from '@inertiajs/react';
-import { useConfirm } from '@/Components/ConfirmModal';
+import { Head, useForm } from '@inertiajs/react';
 
 export default function Index({ projects }) {
     const { data, setData, post, processing, errors, reset } = useForm({
@@ -8,20 +7,10 @@ export default function Index({ projects }) {
         code: '',
         description: '',
     });
-    const { confirmModal, askConfirm } = useConfirm();
-
     const onSubmit = (e) => {
         e.preventDefault();
         post(route('projects.store'), { onSuccess: () => reset() });
     };
-
-    const handleDeleteProject = (project) => askConfirm({
-        title: `¿Eliminar proyecto?`,
-        message: `Se eliminará "${project.name}" y todas sus carpetas. Esta acción no se puede deshacer.`,
-        confirmLabel: 'Eliminar',
-        variant: 'danger',
-        onConfirm: () => router.delete(route('projects.destroy', project.id)),
-    });
 
     return (
         <AuthenticatedLayout
@@ -187,15 +176,6 @@ export default function Index({ projects }) {
                                         </svg>
                                         Ver Carpetas
                                     </a>
-
-                                    <button
-                                        onClick={() => handleDeleteProject(project)}
-                                        className="w-9 h-9 flex items-center justify-center rounded-xl bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition"
-                                    >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
-                                    </button>
                                 </div>
                             </div>
                         ))}
@@ -204,8 +184,6 @@ export default function Index({ projects }) {
 
             </div>
 
-            {/* Modal de confirmación global */}
-            {confirmModal}
         </AuthenticatedLayout>
     );
 }

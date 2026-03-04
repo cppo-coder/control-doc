@@ -36,7 +36,7 @@ return [
     ],
 
     'gemini' => [
-        'key' => env('GEMINI_API_KEY'),
+        'keys' => array_map('trim', explode(',', env('GEMINI_API_KEYS', env('GEMINI_API_KEY')))),
     ],
 
 ];

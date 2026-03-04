@@ -89,11 +89,11 @@ export default function ConfirmModal({
 
     return (
         <div
-            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0B0F19]/60 backdrop-blur-[6px] transition-all duration-300"
             onClick={onCancel}
         >
             <div
-                className="bg-white rounded-[24px] shadow-2xl w-full max-w-sm border border-[#EAECF0] p-6 flex flex-col gap-5"
+                className="bg-white rounded-[32px] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.18)] w-full max-w-sm border border-[#EAECF0] p-7 flex flex-col gap-6 animate-in fade-in zoom-in-95 duration-200"
                 onClick={e => e.stopPropagation()}
             >
                 {/* Icon + Title */}

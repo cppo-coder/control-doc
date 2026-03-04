@@ -2,10 +2,14 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Worker extends Model
 {
+    use SoftDeletes, Auditable;
+
     protected $fillable = [
         'rut',
         'nacionalidad',
@@ -33,6 +37,26 @@ class Worker extends Model
         'name',
         'position',
         'department',
-        'is_active'
+        'is_active',
     ];
+
+    protected $casts = [
+        // Datos bancarios cifrados en reposo
+        'cta_bancaria'             => 'encrypted',
+        'beneficiario_cta_abono'   => 'encrypted',
+        'beneficiario_swift'       => 'encrypted',
+        'is_active'                => 'boolean',
+        'fecha_nacimiento'         => 'date',
+    ];
+
+    public function courses()
+    {
+        return $this->hasMany(Course::class);
+    }
+
+    /** Etiqueta para el audit log */
+    public function getAuditLabel(): string
+    {
+        return trim("{$this->nombres} {$this->apellido_paterno}") ?: "Worker #{$this->id}";
+    }
 }

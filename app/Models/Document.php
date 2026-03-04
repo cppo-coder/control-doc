@@ -2,10 +2,14 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Document extends Model
 {
+    use SoftDeletes, Auditable;
+
     protected $fillable = [
         'document_category_id',
         'name',
@@ -16,7 +20,7 @@ class Document extends Model
     ];
 
     protected $casts = [
-        'analysis_data' => 'array',
+        'analysis_data' => 'encrypted:array', // datos médicos/diagnósticos cifrados en reposo
         'analyzed_at'   => 'datetime',
     ];
 
@@ -25,9 +29,14 @@ class Document extends Model
         return $this->belongsTo(DocumentCategory::class, 'document_category_id');
     }
 
-    /** Retorna true si hay al menos una alerta */
     public function hasAlerts(): bool
     {
         return in_array($this->analysis_status, ['alert', 'critical']);
+    }
+
+    /** Etiqueta para el audit log */
+    public function getAuditLabel(): string
+    {
+        return $this->name ?? "Document #{$this->id}";
     }
 }

@@ -10,7 +10,7 @@ export default function Modal({
     show = false,
     maxWidth = '2xl',
     closeable = true,
-    onClose = () => {},
+    onClose = () => { },
 }) {
     const close = () => {
         if (closeable) {
@@ -31,7 +31,7 @@ export default function Modal({
             <Dialog
                 as="div"
                 id="modal"
-                className="fixed inset-0 z-50 flex transform items-center overflow-y-auto px-4 py-6 transition-all sm:px-0"
+                className="fixed inset-0 z-50 flex transform items-center justify-center overflow-y-auto p-4 transition-all sm:p-6"
                 onClose={close}
             >
                 <TransitionChild
@@ -42,7 +42,7 @@ export default function Modal({
                     leaveFrom="opacity-100"
                     leaveTo="opacity-0"
                 >
-                    <div className="absolute inset-0 bg-gray-500/75 dark:bg-gray-900/75" />
+                    <div className="absolute inset-0 bg-[#0B0F19]/60 backdrop-blur-[6px]" />
                 </TransitionChild>
 
                 <TransitionChild
@@ -54,7 +54,7 @@ export default function Modal({
                     leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
                 >
                     <DialogPanel
-                        className={`mb-6 transform overflow-hidden rounded-lg bg-white shadow-xl transition-all sm:mx-auto sm:w-full dark:bg-gray-800 ${maxWidthClass}`}
+                        className={`transform overflow-hidden rounded-[32px] bg-white shadow-[0_32px_64px_-12px_rgba(0,0,0,0.18)] transition-all sm:w-full dark:bg-gray-800 ${maxWidthClass}`}
                     >
                         {children}
                     </DialogPanel>

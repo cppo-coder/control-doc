@@ -4,14 +4,18 @@ namespace App\Http\Controllers;
 
 use App\Models\Document;
 use App\Models\DocumentCategory;
+use App\Models\DocumentDeletionLog;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
 class DocumentController extends Controller
 {
-    public function store(Request $request, DocumentCategory $category)
+    public function store(Request $request, DocumentCategory $category, \App\Services\DocumentAnalysisService $analysisService)
     {
+        $this->authorize('update', $category->project);
+
         $request->validate([
             'document' => 'required|file|mimes:pdf|max:20480',
         ]);
@@ -31,8 +35,13 @@ class DocumentController extends Controller
                 'file_path' => $drivePath,
             ]);
 
+
             if ($request->expectsJson()) {
-                return response()->json(['success' => true, 'document_id' => $doc->id]);
+                return response()->json([
+                    'success'     => true,
+                    'document_id' => $doc->id,
+                    'status'      => $doc->fresh()->analysis_status,
+                ]);
             }
 
             return redirect()->back()->with('success', 'Documento subido con éxito.');
@@ -46,15 +55,34 @@ class DocumentController extends Controller
             return redirect()->back()->withErrors(['document' => 'Error al subir el documento a Google Drive.']);
         }
     }
-    
-    public function destroy(Document $document)
+
+    public function destroy(Request $request, Document $document)
     {
-        // optionally support document deletion
+        $this->authorize('delete', $document);
+
+        // Cargar relaciones para el log
+        $document->loadMissing('category.project');
+
+        // ── Registrar trazabilidad ──────────────────────────────────────────
+        DocumentDeletionLog::create([
+            'deleted_by'    => Auth::id(),
+            'document_name' => $document->name,
+            'file_path'     => $document->file_path,
+            'category_name' => $document->category?->name,
+            'project_name'  => $document->category?->project?->name,
+            'ip_address'    => $request->ip(),
+            'user_agent'    => $request->userAgent(),
+        ]);
+
+        // ── Eliminar de Google Drive y BD ───────────────────────────────────
         try {
             Storage::disk('google')->delete($document->file_path);
-        } catch (\Exception $e) {}
-        
+        } catch (\Exception $e) {
+            \Log::warning('No se pudo eliminar de Drive: ' . $e->getMessage());
+        }
+
         $document->delete();
+
         return redirect()->back()->with('success', 'Documento eliminado.');
     }
 }

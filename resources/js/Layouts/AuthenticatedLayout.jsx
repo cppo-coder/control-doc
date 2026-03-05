@@ -6,6 +6,8 @@ export default function AuthenticatedLayout({ header, children }) {
     const { props, url } = usePage();
     const user = props.auth.user;
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [personalMenuOpen, setPersonalMenuOpen] = useState(route().current('workers.*'));
+    const [shiftsMenuOpen, setShiftsMenuOpen] = useState(route().current('shifts.*'));
     const isProjectsOrCategories = route().current('projects.*') || url.includes('/categories');
 
     return (
@@ -73,18 +75,111 @@ export default function AuthenticatedLayout({ header, children }) {
                         Archivos en Drive
                     </Link>
 
-                    <Link
-                        href={route('workers.index')}
-                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all ${route().current('workers.*')
-                            ? 'bg-[#EEF2FF] text-[#5340FF]'
-                            : 'text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827]'
-                            }`}
-                    >
-                        <svg className={`w-[18px] h-[18px] shrink-0 ${route().current('workers.*') ? 'text-[#5340FF]' : 'text-[#9CA3AF]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                        </svg>
-                        Personal
-                    </Link>
+                    {/* Personal con Submenú (Acordeón) */}
+                    <div className="space-y-1">
+                        <button
+                            onClick={() => setPersonalMenuOpen(!personalMenuOpen)}
+                            className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all hover:bg-[#F9FAFB] group ${route().current('workers.*')
+                                ? 'text-[#5340FF]'
+                                : 'text-[#6B7280]'
+                                }`}
+                        >
+                            <div className="flex items-center gap-3">
+                                <svg className={`w-[18px] h-[18px] shrink-0 ${route().current('workers.*') ? 'text-[#5340FF]' : 'text-[#9CA3AF] group-hover:text-[#111827]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                                </svg>
+                                Personal
+                            </div>
+                            <svg className={`w-3.5 h-3.5 transition-transform duration-300 ${personalMenuOpen ? 'rotate-180' : ''} ${route().current('workers.*') ? 'text-[#5340FF]' : 'text-[#9CA3AF]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+
+                        {personalMenuOpen && (
+                            <div className="pl-9 space-y-1 animate-in slide-in-from-top-2 duration-200">
+                                <Link
+                                    href={route('workers.index')}
+                                    className={`block px-3 py-2 rounded-lg text-[12px] font-medium transition-all ${route().current('workers.index')
+                                        ? 'bg-[#EEF2FF] text-[#5340FF]'
+                                        : 'text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827]'
+                                        }`}
+                                >
+                                    Ficha de Registro
+                                </Link>
+                                <Link
+                                    href={route('workers.master-list')}
+                                    className={`block px-3 py-2 rounded-lg text-[12px] font-medium transition-all ${route().current('workers.master-list')
+                                        ? 'bg-[#EEF2FF] text-[#5340FF]'
+                                        : 'text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827]'
+                                        }`}
+                                >
+                                    Listado Maestro
+                                </Link>
+                                <Link
+                                    href={route('workers.import')}
+                                    className={`block px-3 py-2 rounded-lg text-[12px] font-medium transition-all ${route().current('workers.import')
+                                        ? 'bg-[#EEF2FF] text-[#5340FF]'
+                                        : 'text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827]'
+                                        }`}
+                                >
+                                    Importar trabajadores
+                                </Link>
+                                <Link
+                                    href={route('workers.phone-directory')}
+                                    className={`block px-3 py-2 rounded-lg text-[12px] font-medium transition-all ${route().current('workers.phone-directory')
+                                        ? 'bg-[#EEF2FF] text-[#5340FF]'
+                                        : 'text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827]'
+                                        }`}
+                                >
+                                    Agenda Telefónica
+                                </Link>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Turnos con Submenú (Acordeón) */}
+                    <div className="space-y-1">
+                        <button
+                            onClick={() => setShiftsMenuOpen(!shiftsMenuOpen)}
+                            className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all hover:bg-[#F9FAFB] group ${route().current('shifts.*')
+                                ? 'text-[#5340FF]'
+                                : 'text-[#6B7280]'
+                                }`}
+                        >
+                            <div className="flex items-center gap-3">
+                                <svg className={`w-[18px] h-[18px] shrink-0 ${route().current('shifts.*') ? 'text-[#5340FF]' : 'text-[#9CA3AF] group-hover:text-[#111827]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                Turnos
+                            </div>
+                            <svg className={`w-3.5 h-3.5 transition-transform duration-300 ${shiftsMenuOpen ? 'rotate-180' : ''} ${route().current('shifts.*') ? 'text-[#5340FF]' : 'text-[#9CA3AF]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+
+                        {shiftsMenuOpen && (
+                            <div className="pl-9 space-y-1 animate-in slide-in-from-top-2 duration-200">
+                                <Link
+                                    href={route('shifts.index')}
+                                    className={`block px-3 py-2 rounded-lg text-[12px] font-medium transition-all ${route().current('shifts.index')
+                                        ? 'bg-[#EEF2FF] text-[#5340FF]'
+                                        : 'text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827]'
+                                        }`}
+                                >
+                                    Programación
+                                </Link>
+                                <Link
+                                    href={route('shifts.groups.index')}
+                                    className={`block px-3 py-2 rounded-lg text-[12px] font-medium transition-all ${route().current('shifts.groups.index')
+                                        ? 'bg-[#EEF2FF] text-[#5340FF]'
+                                        : 'text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827]'
+                                        }`}
+                                >
+                                    Crear Grupo (Turno)
+                                </Link>
+                            </div>
+                        )}
+                    </div>
 
                     <Link
                         href={route('courses.index')}

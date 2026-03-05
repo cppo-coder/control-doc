@@ -1,6 +1,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, useForm, router } from '@inertiajs/react';
 import { useState, useMemo } from 'react';
+import { useConfirm } from '@/Components/ConfirmModal';
 
 export default function Index({ courses, workers }) {
     const { data, setData, post, patch, processing, errors, reset, delete: destroy } = useForm({
@@ -12,6 +13,7 @@ export default function Index({ courses, workers }) {
 
     const [isEditing, setIsEditing] = useState(false);
     const [showModal, setShowModal] = useState(false);
+    const { confirmModal, askConfirm } = useConfirm();
     const [searchQuery, setSearchQuery] = useState('');
 
     // Filter courses based on search query
@@ -67,9 +69,13 @@ export default function Index({ courses, workers }) {
     };
 
     const deleteCourse = (id) => {
-        if (confirm('¿Estás seguro de eliminar este registro de curso?')) {
-            destroy(route('courses.destroy', id));
-        }
+        askConfirm({
+            title: '¿Eliminar registro?',
+            message: '¿Estás seguro de eliminar este registro de curso? Esta acción no se puede deshacer.',
+            variant: 'danger',
+            confirmLabel: 'Sí, eliminar',
+            onConfirm: () => destroy(route('courses.destroy', id)),
+        });
     };
 
     // Helper to format date nicely (Chilean format DD/MM/YYYY)
@@ -105,6 +111,7 @@ export default function Index({ courses, workers }) {
             }
         >
             <Head title="Cursos de Capacitación" />
+            {confirmModal}
 
             <div className="space-y-6">
                 {/* Search and Filters bar */}

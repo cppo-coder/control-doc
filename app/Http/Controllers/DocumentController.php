@@ -7,6 +7,7 @@ use App\Models\DocumentCategory;
 use App\Models\DocumentDeletionLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
@@ -35,6 +36,8 @@ class DocumentController extends Controller
                 'file_path' => $drivePath,
             ]);
 
+            // Invalidar caché del proyecto para que el nuevo documento aparezca de inmediato
+            Cache::forget("project.{$category->project_id}.categories");
 
             if ($request->expectsJson()) {
                 return response()->json([
@@ -82,6 +85,12 @@ class DocumentController extends Controller
         }
 
         $document->delete();
+
+        // Invalidar caché del proyecto para que la UI se actualice correctamente
+        $projectId = $document->category?->project_id;
+        if ($projectId) {
+            Cache::forget("project.{$projectId}.categories");
+        }
 
         return redirect()->back()->with('success', 'Documento eliminado.');
     }

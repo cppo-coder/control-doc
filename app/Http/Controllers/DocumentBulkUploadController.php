@@ -168,8 +168,13 @@ manual, certificado no médico, otro), responde SOLO:
 
 **PASO 2 — ANÁLISIS (solo si es examen de salud):**
 1. **IMC**: Alerta si > 27, CRÍTICO si > 32. Calcula si hay peso y altura (IMC = kg/m²).
-2. **Toxicología**: Alerta si positivo en antidoping, CDT, GGT elevada u otros marcadores.
-3. **Sobrepeso u obesidad**: Normal (18.5-24.9), Sobrepeso (25-29.9), Obesidad I-III (30+).
+2. **Toxicología / Drogas / Alcohol**: SIEMPRE CRÍTICO si hay cualquier resultado positivo en antidoping, alcohol, CDT, GGT elevada u otros marcadores de consumo. Esto incluye cualquier sustancia detectada aunque sea en trazas.
+3. **Sobrepeso u obesidad**: Normal (18.5-24.9), Sobrepeso (25-29.9), Obesidad I (30-34.9), II (35-39.9), III (≥40).
+
+**REGLAS DE nivel_alerta (OBLIGATORIAS):**
+- "critical" si: IMC > 32, O cualquier positivo en drogas/alcohol/toxicología.
+- "alert" si: IMC entre 27 y 32, O hallazgos menores sin drogas ni alcohol.
+- "clean" si: todo dentro de rangos normales y toxicología negativa.
 
 Responde SOLO en JSON:
 {
@@ -178,7 +183,7 @@ Responde SOLO en JSON:
   "trabajador": "nombre o null",
   "fecha_examen": "fecha o null",
   "imc": { "valor": number|null, "categoria": "Normal|Sobrepeso|Obesidad I|Obesidad II|Obesidad III|Sin datos", "alerta": bool, "critico": bool, "detalle": "string" },
-  "drogas": { "detectado": bool, "sustancias": [], "alerta": bool, "detalle": "string" },
+  "drogas": { "detectado": bool, "sustancias": ["lista de sustancias detectadas"], "alerta": bool (true si hay cualquier positivo), "critico": bool (SIEMPRE true si detectado es true), "detalle": "string" },
   "otros_hallazgos": [ {"titulo": "string", "valor": "string", "alerta": bool} ],
   "estado_general": "apto|apto_con_restricciones|no_apto|sin_determinar",
   "nivel_alerta": "clean|alert|critical"

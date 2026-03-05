@@ -1,8 +1,9 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, useForm, router } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
+import { useConfirm } from '@/Components/ConfirmModal';
 
-export default function Index({ workers }) {
+export default function Index({ workers, auth, selectedWorker }) {
     const { data, setData, post, patch, processing, errors, reset, delete: destroy } = useForm({
         id: null,
         rut: '',
@@ -30,11 +31,23 @@ export default function Index({ workers }) {
         beneficiario_swift: '',
         position: '',
         department: '',
+        is_active: true,
     });
+
+    const { confirmModal, askConfirm } = useConfirm();
 
     const [isEditing, setIsEditing] = useState(false);
     const [idType, setIdType] = useState('rut');
     const [toast, setToast] = useState(null);
+
+    // Cargar trabajador automáticamente si viene seleccionado (por ID o prop)
+    useEffect(() => {
+        if (selectedWorker) {
+            handleEdit(selectedWorker);
+            // Limpiar el ID de la URL si se cargó por prop seleccionada
+            window.history.replaceState({}, '', route('workers.index'));
+        }
+    }, [selectedWorker]);
 
     const showToast = (message, type = 'success') => {
         setToast({ message, type });
@@ -156,7 +169,7 @@ export default function Index({ workers }) {
             nombres: worker.nombres || '',
             apellido_paterno: worker.apellido_paterno || '',
             apellido_materno: worker.apellido_materno || '',
-            fecha_nacimiento: worker.fecha_nacimiento || '',
+            fecha_nacimiento: worker.fecha_nacimiento ? worker.fecha_nacimiento.split('T')[0] : '',
             estado_civil: worker.estado_civil || '',
             direccion: worker.direccion || '',
             comuna: worker.comuna || '',
@@ -174,6 +187,7 @@ export default function Index({ workers }) {
             beneficiario_swift: worker.beneficiario_swift || '',
             position: worker.position || '',
             department: worker.department || '',
+            is_active: worker.is_active ?? true,
         });
 
         if (worker.nacionalidad && worker.nacionalidad !== 'Chilena') {
@@ -186,13 +200,18 @@ export default function Index({ workers }) {
     const handleCancel = () => {
         setIsEditing(false);
         reset();
+        setData('is_active', true);
         setIdType('rut');
     };
 
     const handleDelete = (id) => {
-        if (confirm('¿Estás seguro de eliminar este registro?')) {
-            destroy(route('workers.destroy', id));
-        }
+        askConfirm({
+            title: '¿Eliminar registro?',
+            message: '¿Estás seguro de eliminar este registro de personal? Esta acción no se puede deshacer.',
+            variant: 'danger',
+            confirmLabel: 'Si, eliminar',
+            onConfirm: () => destroy(route('workers.destroy', id)),
+        });
     };
 
 
@@ -206,6 +225,7 @@ export default function Index({ workers }) {
             }
         >
             <Head title="Registro de Personal" />
+            {confirmModal}
 
             {/* TOAST NOTIFICATION */}
             {toast && (
@@ -267,7 +287,7 @@ export default function Index({ workers }) {
                                     <div className="flex-1 h-[1.5px] bg-gradient-to-r from-[#F3F4F6] to-transparent"></div>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-end">
                                     <div className="xl:col-span-2">
                                         <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Documento Principal <span className="text-red-500">*</span></label>
                                         <div className="relative flex items-center group">
@@ -346,29 +366,29 @@ export default function Index({ workers }) {
                                     <h4 className="text-[13px] font-black text-[#111827] uppercase tracking-[0.2em]">Datos Personales</h4>
                                     <div className="flex-1 h-[1.5px] bg-gradient-to-r from-[#F3F4F6] to-transparent"></div>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-8">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-8 items-end">
                                     <div className="md:col-span-2">
-                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Nombres Completos <span className="text-red-500">*</span></label>
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Nombres Completos <span className="text-red-500">*</span></label>
                                         <input type="text" required value={data.nombres} onChange={e => setData('nombres', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#5340FF]/10 focus:border-[#5340FF] focus:bg-white transition-all outline-none shadow-sm" placeholder="Ej: Juan Antonio" />
                                         {errors.nombres && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.nombres}</p>}
                                     </div>
                                     <div className="col-span-1">
-                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Apellido Paterno <span className="text-red-500">*</span></label>
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Apellido Paterno <span className="text-red-500">*</span></label>
                                         <input type="text" required value={data.apellido_paterno} onChange={e => setData('apellido_paterno', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#5340FF]/10 focus:border-[#5340FF] focus:bg-white transition-all outline-none shadow-sm" />
                                         {errors.apellido_paterno && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.apellido_paterno}</p>}
                                     </div>
                                     <div className="col-span-1">
-                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Apellido Materno <span className="text-red-500">*</span></label>
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Apellido Materno <span className="text-red-500">*</span></label>
                                         <input type="text" required value={data.apellido_materno} onChange={e => setData('apellido_materno', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#5340FF]/10 focus:border-[#5340FF] focus:bg-white transition-all outline-none shadow-sm" />
                                         {errors.apellido_materno && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.apellido_materno}</p>}
                                     </div>
                                     <div className="col-span-1">
-                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Fecha de Nacimiento <span className="text-red-500">*</span></label>
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Fecha de Nacimiento <span className="text-red-500">*</span></label>
                                         <input type="date" required value={data.fecha_nacimiento} onChange={e => setData('fecha_nacimiento', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#5340FF]/10 focus:border-[#5340FF] focus:bg-white transition-all outline-none shadow-sm" />
                                         {errors.fecha_nacimiento && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.fecha_nacimiento}</p>}
                                     </div>
                                     <div className="col-span-1">
-                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Estado Civil <span className="text-red-500">*</span></label>
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Estado Civil <span className="text-red-500">*</span></label>
                                         <div className="relative flex items-center">
                                             <select
                                                 required
@@ -399,29 +419,29 @@ export default function Index({ workers }) {
                                     <h4 className="text-[13px] font-black text-[#111827] uppercase tracking-[0.2em]">Ubicación y Comunicación</h4>
                                     <div className="flex-1 h-[1.5px] bg-gradient-to-r from-[#F3F4F6] to-transparent"></div>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 items-end">
                                     <div className="lg:col-span-1">
-                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Comuna / Ciudad <span className="text-red-500">*</span></label>
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Comuna / Ciudad <span className="text-red-500">*</span></label>
                                         <input type="text" required value={data.comuna} onChange={e => setData('comuna', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#5340FF]/10 focus:border-[#5340FF] focus:bg-white transition-all outline-none shadow-sm" />
                                         {errors.comuna && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.comuna}</p>}
                                     </div>
                                     <div className="lg:col-span-2">
-                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Dirección Residencia <span className="text-red-500">*</span></label>
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Dirección Residencia <span className="text-red-500">*</span></label>
                                         <input type="text" required value={data.direccion} onChange={e => setData('direccion', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#5340FF]/10 focus:border-[#5340FF] focus:bg-white transition-all outline-none shadow-sm" />
                                         {errors.direccion && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.direccion}</p>}
                                     </div>
                                     <div className="lg:col-span-2">
-                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Correo Electrónico <span className="text-red-500">*</span></label>
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Correo Electrónico <span className="text-red-500">*</span></label>
                                         <input type="email" required value={data.email} onChange={e => setData('email', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#5340FF]/10 focus:border-[#5340FF] focus:bg-white transition-all outline-none shadow-sm" placeholder="correo@corporativo.com" />
                                         {errors.email && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.email}</p>}
                                     </div>
                                     <div className="lg:col-span-1">
-                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Teléfono Móvil <span className="text-red-500">*</span></label>
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Teléfono Móvil <span className="text-red-500">*</span></label>
                                         <input type="text" required value={data.phone} onChange={e => setData('phone', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#5340FF]/10 focus:border-[#5340FF] focus:bg-white transition-all outline-none shadow-sm" />
                                         {errors.phone && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.phone}</p>}
                                     </div>
                                     <div className="lg:col-span-1">
-                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">WhatsApp / Celular <span className="text-red-500">*</span></label>
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">WhatsApp / Celular <span className="text-red-500">*</span></label>
                                         <input type="text" required value={data.whatsapp} onChange={e => setData('whatsapp', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#5340FF]/10 focus:border-[#5340FF] focus:bg-white transition-all outline-none shadow-sm" />
                                         {errors.whatsapp && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.whatsapp}</p>}
                                     </div>
@@ -435,14 +455,14 @@ export default function Index({ workers }) {
                                     <h4 className="text-[13px] font-black text-[#111827] uppercase tracking-[0.2em]">Emergencia y Respaldo</h4>
                                     <div className="flex-1 h-[1.5px] bg-gradient-to-r from-[#F3F4F6] to-transparent"></div>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 items-end">
                                     <div className="md:col-span-2">
-                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Nombre del Contacto Directo <span className="text-red-500">*</span></label>
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Nombre del Contacto Directo <span className="text-red-500">*</span></label>
                                         <input type="text" required value={data.emergencia_contacto_nombre} onChange={e => setData('emergencia_contacto_nombre', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#F43F5E]/10 focus:border-[#F43F5E] focus:bg-white transition-all outline-none shadow-sm" placeholder="Nombre completo del familiar" />
                                         {errors.emergencia_contacto_nombre && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.emergencia_contacto_nombre}</p>}
                                     </div>
                                     <div className="md:col-span-1">
-                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Teléfono de Emergencia <span className="text-red-500">*</span></label>
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Teléfono de Emergencia <span className="text-red-500">*</span></label>
                                         <input type="text" required value={data.emergencia_contacto_numero} onChange={e => setData('emergencia_contacto_numero', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#F43F5E]/10 focus:border-[#F43F5E] focus:bg-white transition-all outline-none shadow-sm" placeholder="+56 9..." />
                                         {errors.emergencia_contacto_numero && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.emergencia_contacto_numero}</p>}
                                     </div>
@@ -456,11 +476,11 @@ export default function Index({ workers }) {
                                     <h4 className="text-[13px] font-black text-[#111827] uppercase tracking-[0.2em]">Información bancaria</h4>
                                     <div className="flex-1 h-[1.5px] bg-gradient-to-r from-[#F3F4F6] to-transparent"></div>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 items-end">
                                     {data.nacionalidad === 'Chilena' && (
                                         <>
                                             <div className="col-span-1">
-                                                <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Entidad Bancaria <span className="text-red-500">*</span></label>
+                                                <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Entidad Bancaria <span className="text-red-500">*</span></label>
                                                 <div className="relative flex items-center">
                                                     <select
                                                         required
@@ -482,7 +502,7 @@ export default function Index({ workers }) {
                                                 {errors.cod_banco && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.cod_banco}</p>}
                                             </div>
                                             <div className="col-span-1">
-                                                <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Tipo de Cuenta <span className="text-red-500">*</span></label>
+                                                <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Tipo de Cuenta <span className="text-red-500">*</span></label>
                                                 <div className="relative flex items-center">
                                                     <select
                                                         required
@@ -504,7 +524,7 @@ export default function Index({ workers }) {
                                                 {errors.tipo_cuenta && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.tipo_cuenta}</p>}
                                             </div>
                                             <div className="col-span-1">
-                                                <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Número de Cuenta <span className="text-red-500">*</span></label>
+                                                <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Número de Cuenta <span className="text-red-500">*</span></label>
                                                 <input type="text" required value={data.cta_bancaria} onChange={e => setData('cta_bancaria', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#059669]/10 focus:border-[#059669] focus:bg-white transition-all outline-none shadow-sm" />
                                                 {errors.cta_bancaria && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.cta_bancaria}</p>}
                                             </div>
@@ -514,27 +534,64 @@ export default function Index({ workers }) {
                                     {data.nacionalidad && data.nacionalidad !== 'Chilena' && (
                                         <>
                                             <div className="col-span-1">
-                                                <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Dirección Beneficiario <span className="text-red-500">*</span></label>
+                                                <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Dirección Beneficiario <span className="text-red-500">*</span></label>
                                                 <input type="text" required value={data.beneficiario_direccion} onChange={e => setData('beneficiario_direccion', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#059669]/10 focus:border-[#059669] focus:bg-white transition-all outline-none shadow-sm" />
                                                 {errors.beneficiario_direccion && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.beneficiario_direccion}</p>}
                                             </div>
                                             <div className="col-span-1">
-                                                <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Ciudad del Beneficiario <span className="text-red-500">*</span></label>
+                                                <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Ciudad del Beneficiario <span className="text-red-500">*</span></label>
                                                 <input type="text" required value={data.beneficiario_ciudad} onChange={e => setData('beneficiario_ciudad', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#059669]/10 focus:border-[#059669] focus:bg-white transition-all outline-none shadow-sm" />
                                                 {errors.beneficiario_ciudad && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.beneficiario_ciudad}</p>}
                                             </div>
                                             <div className="col-span-1">
-                                                <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Cta. Abono Beneficiario <span className="text-red-500">*</span></label>
+                                                <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Cta. Abono Beneficiario <span className="text-red-500">*</span></label>
                                                 <input type="text" required value={data.beneficiario_cta_abono} onChange={e => setData('beneficiario_cta_abono', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#059669]/10 focus:border-[#059669] focus:bg-white transition-all outline-none shadow-sm" />
                                                 {errors.beneficiario_cta_abono && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.beneficiario_cta_abono}</p>}
                                             </div>
                                             <div className="col-span-1">
-                                                <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">BIC / SWIFT <span className="text-red-500">*</span></label>
+                                                <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">BIC / SWIFT <span className="text-red-500">*</span></label>
                                                 <input type="text" required value={data.beneficiario_swift} onChange={e => setData('beneficiario_swift', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#059669]/10 focus:border-[#059669] focus:bg-white transition-all outline-none shadow-sm" />
                                                 {errors.beneficiario_swift && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.beneficiario_swift}</p>}
                                             </div>
                                         </>
                                     )}
+                                </div>
+                            </div>
+
+                            {/* SECCION 6: DATOS LABORALES */}
+                            <div className="space-y-5">
+                                <div className="flex items-center gap-5">
+                                    <div className="flex items-center justify-center w-10 h-10 rounded-2xl bg-[#5340FF] text-white text-sm font-black shadow-lg shadow-indigo-100 ring-4 ring-indigo-50/50 transition-transform hover:scale-105 cursor-default">6</div>
+                                    <h4 className="text-[13px] font-black text-[#111827] uppercase tracking-[0.2em]">Datos Laborales y Estado</h4>
+                                    <div className="flex-1 h-[1.5px] bg-gradient-to-r from-[#F3F4F6] to-transparent"></div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-end">
+                                    <div className="col-span-1">
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Cargo / Función</label>
+                                        <input type="text" value={data.position} onChange={e => setData('position', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#5340FF]/10 focus:border-[#5340FF] focus:bg-white transition-all outline-none shadow-sm" placeholder="Ej: Supervisor de Obra" />
+                                        {errors.position && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.position}</p>}
+                                    </div>
+                                    <div className="col-span-1">
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Departamento / Área</label>
+                                        <input type="text" value={data.department} onChange={e => setData('department', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#5340FF]/10 focus:border-[#5340FF] focus:bg-white transition-all outline-none shadow-sm" placeholder="Ej: Operaciones" />
+                                        {errors.department && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.department}</p>}
+                                    </div>
+                                    <div className="col-span-1 flex items-center gap-4 bg-[#F9FAFB] p-3 rounded-xl border border-[#EAECF0] h-11">
+                                        <label className="text-[11px] font-black text-[#6B7280] uppercase tracking-[0.1em]">¿Trabajador Activo?</label>
+                                        <button
+                                            type="button"
+                                            onClick={() => setData('is_active', !data.is_active)}
+                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#5340FF] focus:ring-offset-2 ${data.is_active ? 'bg-[#10B981]' : 'bg-[#EF4444]'}`}
+                                        >
+                                            <span className="sr-only">Estado Activo</span>
+                                            <span
+                                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${data.is_active ? 'translate-x-6' : 'translate-x-1'}`}
+                                            />
+                                        </button>
+                                        <span className={`text-[10px] font-bold uppercase ${data.is_active ? 'text-[#10B981]' : 'text-[#EF4444]'}`}>
+                                            {data.is_active ? 'SÍ' : 'NO'}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
 

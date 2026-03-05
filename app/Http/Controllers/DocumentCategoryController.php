@@ -23,7 +23,7 @@ class DocumentCategoryController extends Controller
                 ->with([
                     'documents' => fn ($q) => $q->select([
                         'id', 'document_category_id', 'name',
-                        'analysis_status', 'analyzed_at', 'created_at',
+                        'analysis_status', 'analysis_data', 'analyzed_at', 'created_at',
                     ])->latest()
                 ])
                 ->select(['id', 'project_id', 'name', 'created_at'])

@@ -632,7 +632,17 @@ function DocumentRow({ doc, category }) {
         message: `Se eliminará "${doc.name}" de Google Drive. Esta acción no se puede deshacer.`,
         confirmLabel: 'Eliminar',
         variant: 'danger',
-        onConfirm: () => router.delete(route('documents.destroy', doc.id), { preserveScroll: true }),
+        onConfirm: () => router.delete(route('documents.destroy', doc.id), {
+            preserveScroll: true,
+            onSuccess: () => {
+                // Recargar solo las categorías para que el documento desaparezca inmediatamente
+                router.reload({ only: ['categories'], preserveScroll: true });
+            },
+            onError: () => {
+                // Si el documento ya no existe (404 u otro error), recargar igualmente
+                router.reload({ only: ['categories'], preserveScroll: true });
+            },
+        }),
     });
 
     return (
@@ -662,8 +672,8 @@ function DocumentRow({ doc, category }) {
                         </span>
                     )}
 
-                    {/* Botón Analizar / Re-analizar */}
-                    {isExamenFolder(category.name) && (
+                    {/* Botón Analizar — solo si nunca fue analizado (pending/null) o si falló (error) */}
+                    {isExamenFolder(category.name) && (!doc.analysis_status || doc.analysis_status === 'pending' || doc.analysis_status === 'error') && (
                         <button
                             onClick={analyze}
                             disabled={isPending}
@@ -683,7 +693,7 @@ function DocumentRow({ doc, category }) {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
                                 </svg>
                             )}
-                            {doc.analysis_status === 'error' ? 'Re-intentar' : (doc.analysis_status && doc.analysis_status !== 'pending' ? 'Re-analizar' : 'Analizar')}
+                            {doc.analysis_status === 'error' ? 'Re-intentar' : 'Analizar'}
                         </button>
                     )}
 

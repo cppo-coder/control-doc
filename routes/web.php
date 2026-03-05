@@ -57,10 +57,27 @@ Route::middleware('auth')->group(function () {
     });
 
     // Personnel (Personal)
+    Route::get('/workers/master-list', [\App\Http\Controllers\WorkerController::class, 'masterList'])->name('workers.master-list');
+    Route::get('/workers/phone-directory', [\App\Http\Controllers\WorkerController::class, 'phoneDirectory'])->name('workers.phone-directory');
+    Route::get('/workers/import', [\App\Http\Controllers\WorkerController::class, 'import'])->name('workers.import');
+    Route::post('/workers/bulk', [\App\Http\Controllers\WorkerController::class, 'bulkStore'])->name('workers.bulk-store');
     Route::resource('workers', \App\Http\Controllers\WorkerController::class)->names('workers');
 
     // Courses (Cursos)
     Route::resource('courses', \App\Http\Controllers\CourseController::class)->names('courses');
+
+    // Turnos (Shifts)
+    Route::get('/shifts', [\App\Http\Controllers\ShiftScheduleController::class, 'index'])->name('shifts.index');
+    Route::post('/shifts/days', [\App\Http\Controllers\ShiftScheduleController::class, 'updateDays'])->name('shifts.days.update');
+    
+    // Grupos de Turnos (Shift Groups Manager)
+    Route::get('/shifts/groups', [\App\Http\Controllers\ShiftGroupController::class, 'index'])->name('shifts.groups.index');
+    Route::post('/shifts/schedules', [\App\Http\Controllers\ShiftScheduleController::class, 'storeSchedule'])->name('shifts.schedules.store');
+    Route::put('/shifts/schedules/{schedule}', [\App\Http\Controllers\ShiftScheduleController::class, 'updateSchedule'])->name('shifts.schedules.update');
+    Route::delete('/shifts/schedules/{schedule}', [\App\Http\Controllers\ShiftScheduleController::class, 'destroySchedule'])->name('shifts.schedules.destroy');
+    Route::post('/shifts/groups/schedules/{schedule}/assign-workers', [\App\Http\Controllers\ShiftGroupController::class, 'assignWorkers'])->name('shifts.groups.assign');
+    Route::delete('/shifts/schedules/{schedule}/remove/{worker}', [\App\Http\Controllers\ShiftGroupController::class, 'removeWorker'])->name('shifts.schedules.remove');
+    Route::post('/shifts/schedules/reorder', [\App\Http\Controllers\ShiftScheduleController::class, 'reorderSchedules'])->name('shifts.schedules.reorder');
 });
 
 require __DIR__ . '/auth.php';

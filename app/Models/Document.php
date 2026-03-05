@@ -20,7 +20,7 @@ class Document extends Model
     ];
 
     protected $casts = [
-        'analysis_data' => 'encrypted:array', // datos médicos/diagnósticos cifrados en reposo
+        'analysis_data' => 'array', // JSON plano — la columna es TEXT en PostgreSQL
         'analyzed_at'   => 'datetime',
     ];
 

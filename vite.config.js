@@ -10,27 +10,10 @@ export default defineConfig({
         }),
         react(),
     ],
+    resolve: {
+        dedupe: ['react', 'react-dom'],
+    },
     build: {
-        rollupOptions: {
-            output: {
-                manualChunks(id) {
-                    // Inertia + React en un chunk "framework" compartido
-                    if (id.includes('node_modules/@inertiajs') ||
-                        id.includes('node_modules/react-dom') ||
-                        id.includes('node_modules/react/')) {
-                        return 'framework';
-                    }
-                    // TanStack Query en su propio chunk
-                    if (id.includes('node_modules/@tanstack')) {
-                        return 'tanstack';
-                    }
-                    // Resto de node_modules → vendor
-                    if (id.includes('node_modules/')) {
-                        return 'vendor';
-                    }
-                },
-            },
-        },
-        chunkSizeWarningLimit: 400,
+        chunkSizeWarningLimit: 600,
     },
 });

@@ -5,13 +5,19 @@ namespace App\Http\Controllers;
 use App\Models\Project;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 use Inertia\Inertia;
 
-class ProjectController extends Controller
+class ProjectController extends Controller implements HasMiddleware
 {
-    public function __construct()
+    public static function middleware(): array
     {
-        $this->authorizeResource(Project::class, 'project');
+        return [
+            new Middleware('can:viewAny,App\Models\Project', only: ['index']),
+            new Middleware('can:create,App\Models\Project', only: ['store']),
+            new Middleware('can:delete,project', only: ['destroy']),
+        ];
     }
 
     public function index()

@@ -32,16 +32,20 @@ class SecurityHeadersMiddleware
             $response->headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
         }
 
-        // Content Security Policy (CSP) - Ajustada para Vite + Inertia
-        // Nota: En producción sería más estricta, aquí permitimos hashes/blobs para desarrollo local
-        $csp = "default-src 'self'; " .
-               "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " . // eval necesario para compilación JIT de React en dev
-               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " .
-               "font-src 'self' https://fonts.gstatic.com data:; " .
-               "img-src 'self' data: https://* http://*; " .
-               "connect-src 'self' https://* http://* ws://* wss://*;";
-        
-        $response->headers->set('Content-Security-Policy', $csp);
+        // Content Security Policy (CSP)
+        // En local, omitimos el CSP para no bloquear el servidor de desarrollo de Vite
+        if (app()->environment('production')) {
+            $csp = "default-src 'self'; " .
+                   "script-src 'self' 'unsafe-inline'; " .
+                   "script-src-elem 'self' 'unsafe-inline'; " .
+                   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.bunny.net; " .
+                   "style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.bunny.net; " .
+                   "font-src 'self' https://fonts.gstatic.com https://fonts.bunny.net data:; " .
+                   "img-src 'self' data: https://*; " .
+                   "connect-src 'self' https://* wss://*;";
+
+            $response->headers->set('Content-Security-Policy', $csp);
+        }
 
         return $response;
     }

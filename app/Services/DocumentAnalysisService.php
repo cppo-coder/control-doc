@@ -24,6 +24,16 @@ class DocumentAnalysisService
             ];
         }
 
+        // ── GUARDA: Si ya fue analizado exitosamente, no gastar tokens ──
+        $successStatuses = ['clean', 'alert', 'critical', 'rejected'];
+        if (in_array($document->analysis_status, $successStatuses) && $document->analysis_data) {
+            return [
+                'success' => true,
+                'status'  => $document->analysis_status,
+                'data'    => $document->analysis_data,
+            ];
+        }
+
         // 1. Descargar PDF desde Google Drive
         try {
             $fileContent = Storage::disk('google')->get($document->file_path);
@@ -110,8 +120,13 @@ Si el documento NO es un examen de salud (por ejemplo: contrato, factura, orden 
 **PASO 2 — ANÁLISIS (solo si es examen de salud):**
 Si SÍ es un examen de salud, analiza:
 1. **IMC**: Alerta si > 27, CRÍTICO si > 32. Calcula si hay peso y altura (IMC = kg/m²).
-2. **Toxicología / Drogas / Alcohol**: Alerta si hay positivos en antidoping, CDT, GGT elevada u otros marcadores.
+2. **Toxicología / Drogas / Alcohol**: SIEMPRE CRÍTICO si hay cualquier resultado positivo en antidoping, alcohol, CDT, GGT elevada u otros marcadores de consumo. Esto incluye cualquier sustancia detectada aunque sea en trazas.
 3. **Sobrepeso u obesidad**: Normal (18.5-24.9), Sobrepeso (25-29.9), Obesidad I (30-34.9), II (35-39.9), III (≥40).
+
+**REGLAS DE nivel_alerta (OBLIGATORIAS):**
+- "critical" si: IMC > 32, O cualquier positivo en drogas/alcohol/toxicología.
+- "alert" si: IMC entre 27 y 32, O hallazgos menores sin drogas ni alcohol.
+- "clean" si: todo dentro de rangos normales y toxicología negativa.
 
 Y responde ÚNICAMENTE en JSON con este esquema:
 {
@@ -121,15 +136,16 @@ Y responde ÚNICAMENTE en JSON con este esquema:
   "fecha_examen": "Fecha del documento o null",
   "imc": { 
     "valor": número o null, 
-    "categoria": "Normal|Sobrepeso|Obesidad I|Obisidad II|Obesidad III|Sin datos", 
+    "categoria": "Normal|Sobrepeso|Obesidad I|Obesidad II|Obesidad III|Sin datos", 
     "alerta": bool (true si imc > 27), 
     "critico": bool (true si imc > 32), 
     "detalle": "Breve nota sobre el peso/talla" 
   },
   "drogas": { 
     "detectado": bool, 
-    "sustancias": ["lista de sustancias"], 
-    "alerta": bool, 
+    "sustancias": ["lista de sustancias detectadas"], 
+    "alerta": bool (true si hay cualquier positivo),
+    "critico": bool (SIEMPRE true si detectado es true),
     "detalle": "Descripción de hallazgos toxicológicos" 
   },
   "otros_hallazgos": [ 
@@ -168,9 +184,13 @@ PROMPT;
                             Log::warning("Gemini Analysis Attempt Failed. KeyIndex: {$currentIndex}, Model: {$model}, Status: {$status}. Retrying other options...");
                             continue;
 
+                        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+                            $lastError = $e->getMessage();
+                            Log::error("[GEMINI] Sin conexión con la IA — No se pudo alcanzar la API de Gemini. Verifica tu conexión a internet. Modelo: {$model}, KeyIndex: {$currentIndex}. Detalle: " . $lastError);
+                            continue;
                         } catch (\Exception $e) {
                             $lastError = $e->getMessage();
-                            Log::warning("Gemini Exception during attempt: " . $lastError . ". Retrying next...");
+                            Log::warning("[GEMINI] Error en intento de análisis. Modelo: {$model}, KeyIndex: {$currentIndex}. Detalle: " . $lastError . ". Reintentando...");
                             continue;
                         }
                     }
@@ -195,13 +215,30 @@ PROMPT;
             }
 
             return ['success' => true, 'status' => $document->analysis_status, 'data' => $analysisData];
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            $errorMsg = 'Sin conexión con la IA. Verifica tu acceso a internet e inténtalo de nuevo.';
+            Log::error('[GEMINI] ===== SIN CONEXIÓN CON LA IA ===== No se pudo conectar con la API de Gemini. Detalle: ' . $e->getMessage());
+
+            $document->update([
+                'analysis_status' => 'error',
+                'analysis_data'   => ['error' => $errorMsg],
+                'analyzed_at'     => now(),
+            ]);
+            return ['success' => false, 'error' => $errorMsg];
+
         } catch (\Exception $e) {
-            Log::error('Gemini análisis falló: ' . $e->getMessage());
-            
-            // Intentar extraer el mensaje de cuota o permiso para guardarlo en la BD
             $errorMsg = $e->getMessage();
-            if (str_contains($errorMsg, 'quota') || str_contains($errorMsg, 'RESOURCE_EXHAUSTED')) {
+
+            if (str_contains($errorMsg, 'cURL error 6') || str_contains($errorMsg, 'Could not resolve host')) {
+                $errorMsg = 'Sin conexión con la IA. No se pudo resolver el host de Gemini. Verifica tu internet.';
+                Log::error('[GEMINI] ===== SIN CONEXIÓN CON LA IA ===== No se pudo resolver el host. Detalle: ' . $e->getMessage());
+            } elseif (str_contains($errorMsg, 'quota') || str_contains($errorMsg, 'RESOURCE_EXHAUSTED')) {
                 $errorMsg = 'Límite de cuota excedido en Gemini (Free Tier). Favor esperar unos segundos.';
+                Log::warning('[GEMINI] Cuota de API agotada: ' . $e->getMessage());
+            } elseif (str_contains($errorMsg, 'agotaron todos los modelos')) {
+                Log::error('[GEMINI] ===== TODOS LOS MODELOS Y LLAVES FALLARON ===== Último error: ' . $e->getMessage());
+            } else {
+                Log::error('[GEMINI] Error inesperado durante el análisis: ' . $e->getMessage());
             }
 
             $document->update([

@@ -4,10 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Document;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
-use Smalot\PdfParser\Parser;
 
 class DocumentAnalysisController extends Controller
 {
@@ -17,6 +15,15 @@ class DocumentAnalysisController extends Controller
     public function analyze(Document $document, \App\Services\DocumentAnalysisService $service)
     {
         $result = $service->analyze($document);
+
+        // Refrescar el modelo desde la BD para obtener el status/data actualizado
+        $document->refresh();
+
+        // Invalidar caché del proyecto para que el reload del frontend reciba datos frescos
+        $projectId = $document->category?->project_id;
+        if ($projectId) {
+            Cache::forget("project.{$projectId}.categories");
+        }
 
         if (request()->wantsJson()) {
             return response()->json([

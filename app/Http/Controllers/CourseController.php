@@ -5,22 +5,29 @@ namespace App\Http\Controllers;
 use App\Models\Course;
 use App\Models\Worker;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
-class CourseController extends Controller
+class CourseController extends Controller implements HasMiddleware
 {
-    public function __construct()
+    public static function middleware(): array
     {
-        $this->authorizeResource(Course::class, 'course');
+        return [
+            new Middleware('can:viewAny,App\Models\Course', only: ['index']),
+            new Middleware('can:create,App\Models\Course', only: ['store']),
+            new Middleware('can:update,course', only: ['update']),
+            new Middleware('can:delete,course', only: ['destroy']),
+        ];
     }
 
     public function index()
     {
         return inertia('Courses/Index', [
             'courses' => Course::select('id', 'worker_id', 'nombre_curso', 'fecha_realizacion')
-                               ->with('worker:id,nombres,apellidos')
+                               ->with('worker:id,nombres,apellido_paterno')
                                ->orderBy('fecha_realizacion', 'desc')
                                ->paginate(50),
-            'workers' => Worker::select('id', 'nombres', 'apellidos')
+            'workers' => Worker::select('id', 'nombres', 'apellido_paterno')
                                ->orderBy('nombres')
                                ->get()
         ]);

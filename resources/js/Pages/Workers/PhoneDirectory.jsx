@@ -1,17 +1,11 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 
-export default function PhoneDirectory({ auth, workers }) {
-    const [search, setSearch] = useState('');
-
-    const filteredWorkers = workers.filter(worker =>
-        worker.nombres.toLowerCase().includes(search.toLowerCase()) ||
-        worker.apellido_paterno.toLowerCase().includes(search.toLowerCase()) ||
-        worker.apellido_materno.toLowerCase().includes(search.toLowerCase()) ||
-        (worker.rut && worker.rut.includes(search)) ||
-        (worker.pasaporte && worker.pasaporte.toLowerCase().includes(search.toLowerCase()))
-    );
+export default function PhoneDirectory({ auth, workers, filters = {} }) {
+    const [search, setSearch] = useState(filters.search || '');
+    const canEditWorkers = auth.user.permissions.includes('workers.edit');
+    const filteredWorkers = workers.data ?? [];
 
     return (
         <AuthenticatedLayout
@@ -36,7 +30,15 @@ export default function PhoneDirectory({ auth, workers }) {
                                             type="text"
                                             placeholder="Buscar contacto..."
                                             value={search}
-                                            onChange={(e) => setSearch(e.target.value)}
+                                            onChange={(e) => {
+                                                const value = e.target.value;
+                                                setSearch(value);
+                                                router.get(route('workers.phone-directory'), { search: value }, {
+                                                    preserveState: true,
+                                                    replace: true,
+                                                    preserveScroll: true,
+                                                });
+                                            }}
                                             className="w-full md:w-80 h-11 pl-11 pr-5 rounded-xl border border-[#EAECF0] bg-white text-[14px] font-bold text-[#111827] focus:ring-4 focus:ring-[#5340FF]/10 focus:border-[#5340FF] transition-all outline-none"
                                         />
                                         <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#9CA3AF]">
@@ -110,15 +112,23 @@ export default function PhoneDirectory({ auth, workers }) {
                                                 </div>
                                             </td>
                                             <td className="px-8 py-5 text-center">
-                                                <Link
-                                                    href={route('workers.index', { id: worker.id })}
-                                                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 text-[#6B7280] hover:bg-[#5340FF] hover:text-white transition-all shadow-sm"
-                                                    title="Editar ficha"
-                                                >
-                                                    <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                    </svg>
-                                                </Link>
+                                                {canEditWorkers ? (
+                                                    <Link
+                                                        href={route('workers.index', { id: worker.id })}
+                                                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 text-[#6B7280] hover:bg-[#5340FF] hover:text-white transition-all shadow-sm"
+                                                        title="Editar ficha"
+                                                    >
+                                                        <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                        </svg>
+                                                    </Link>
+                                                ) : (
+                                                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 text-[#9CA3AF] shadow-sm cursor-not-allowed" title="Solo lectura">
+                                                        <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12H9m12 0A9 9 0 113 12a9 9 0 0118 0z" />
+                                                        </svg>
+                                                    </span>
+                                                )}
                                             </td>
                                         </tr>
                                     ))}
@@ -136,6 +146,35 @@ export default function PhoneDirectory({ auth, workers }) {
                                     )}
                                 </tbody>
                             </table>
+                        </div>
+
+                        <div className="px-8 py-4 border-t border-[#EAECF0] bg-[#F9FAFB] flex items-center justify-between gap-4">
+                            <div className="text-[12px] font-semibold text-[#6B7280]">
+                                Mostrando {workers.from ?? 0}-{workers.to ?? 0} de {workers.total ?? 0} contactos
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {workers.links?.map((link, index) => (
+                                    !link.url ? (
+                                        <span
+                                            key={index}
+                                            className="min-w-[32px] h-8 px-2 flex items-center justify-center rounded-lg text-[12px] font-bold text-[#9CA3AF] opacity-50"
+                                            dangerouslySetInnerHTML={{ __html: link.label }}
+                                        />
+                                    ) : (
+                                        <Link
+                                            key={index}
+                                            href={link.url}
+                                            preserveScroll
+                                            className={`min-w-[32px] h-8 px-2 flex items-center justify-center rounded-lg text-[12px] font-bold transition-all ${
+                                                link.active
+                                                    ? 'bg-[#5340FF] text-white'
+                                                    : 'text-[#6B7280] hover:bg-white border border-[#EAECF0]'
+                                            }`}
+                                            dangerouslySetInnerHTML={{ __html: link.label }}
+                                        />
+                                    )
+                                ))}
+                            </div>
                         </div>
                     </div>
                 </div>

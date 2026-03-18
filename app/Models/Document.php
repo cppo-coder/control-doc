@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Document extends Model
 {
-    use SoftDeletes, Auditable;
+    use Auditable, SoftDeletes;
 
     protected $fillable = [
         'document_category_id',
@@ -21,7 +21,7 @@ class Document extends Model
 
     protected $casts = [
         'analysis_data' => 'array', // JSON plano — la columna es TEXT en PostgreSQL
-        'analyzed_at'   => 'datetime',
+        'analyzed_at' => 'datetime',
     ];
 
     public function category()
@@ -38,5 +38,15 @@ class Document extends Model
     public function getAuditLabel(): string
     {
         return $this->name ?? "Document #{$this->id}";
+    }
+
+    public function notebooklmDocument()
+    {
+        return $this->hasOne(NotebookLMDocument::class);
+    }
+
+    public function occupationalExam()
+    {
+        return $this->hasOne(OccupationalExam::class);
     }
 }

@@ -17,3 +17,6 @@ Artisan::command('audit:prune', function () {
 
 // Programar limpieza mensual
 \Illuminate\Support\Facades\Schedule::command('audit:prune')->monthly();
+
+// Verificar y cifrar campos sensibles semanalmente (previene DecryptException ante escrituras directas a BD)
+\Illuminate\Support\Facades\Schedule::command('app:encrypt-sensitive-fields')->weekly();

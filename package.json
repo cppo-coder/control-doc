@@ -4,7 +4,8 @@
     "type": "module",
     "scripts": {
         "build": "vite build",
-        "dev": "vite"
+        "dev": "vite",
+        "notebooklm:worker": "node scripts/notebooklm-renewal-server.mjs"
     },
     "devDependencies": {
         "@headlessui/react": "^2.0.0",
@@ -25,6 +26,7 @@
     "dependencies": {
         "@tanstack/react-query": "^5.90.21",
         "@tanstack/react-query-devtools": "^5.91.3",
+        "playwright": "^1.53.2",
         "xlsx": "^0.18.5"
     }
 }

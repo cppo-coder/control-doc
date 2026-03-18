@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\Course;
-use App\Models\Worker;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -24,20 +23,17 @@ class CourseController extends Controller implements HasMiddleware
     {
         return inertia('Courses/Index', [
             'courses' => Course::select('id', 'worker_id', 'nombre_curso', 'fecha_realizacion')
-                               ->with('worker:id,nombres,apellido_paterno')
-                               ->orderBy('fecha_realizacion', 'desc')
-                               ->paginate(50),
-            'workers' => Worker::select('id', 'nombres', 'apellido_paterno')
-                               ->orderBy('nombres')
-                               ->get()
+                ->with('worker:id,nombres,apellido_paterno')
+                ->orderBy('fecha_realizacion', 'desc')
+                ->paginate(50),
         ]);
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'worker_id'         => 'nullable|exists:workers,id',
-            'nombre_curso'      => 'required|string|max:255',
+            'worker_id' => 'nullable|exists:workers,id',
+            'nombre_curso' => 'required|string|max:255',
             'fecha_realizacion' => 'required|date',
         ]);
 
@@ -49,8 +45,8 @@ class CourseController extends Controller implements HasMiddleware
     public function update(Request $request, Course $course)
     {
         $validated = $request->validate([
-            'worker_id'         => 'nullable|exists:workers,id',
-            'nombre_curso'      => 'required|string|max:255',
+            'worker_id' => 'nullable|exists:workers,id',
+            'nombre_curso' => 'required|string|max:255',
             'fecha_realizacion' => 'required|date',
         ]);
 
@@ -62,6 +58,7 @@ class CourseController extends Controller implements HasMiddleware
     public function destroy(Course $course)
     {
         $course->delete();
+
         return back()->with('success', 'Curso eliminado.');
     }
 }

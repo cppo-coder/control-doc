@@ -28,14 +28,14 @@ class ShiftScheduleController extends Controller
         $schedules = ShiftSchedule::where('user_id', auth()->id())
             ->where(function ($q) use ($startOfRange) {
                 $q->whereNull('end_date')
-                  ->orWhere('end_date', '>=', $startOfRange);
+                    ->orWhere('end_date', '>=', $startOfRange);
             })
             ->where('start_date', '<=', $endOfRange)
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get();
 
-        // If no schedules exist, we might want to auto-create defaults or let user create them, 
+        // If no schedules exist, we might want to auto-create defaults or let user create them,
         // we will let the user create them in the view.
 
         $scheduleIds = $schedules->pluck('id');
@@ -50,20 +50,69 @@ class ShiftScheduleController extends Controller
         // Load workers who were in the schedule during the visible range
         $schedules->load(['workers' => function ($query) use ($startOfRange, $endOfRange) {
             $query->select('workers.id', 'nombres', 'apellido_paterno', 'apellido_materno', 'rut', 'position')
-                ->where(function($q) use ($startOfRange, $endOfRange) {
-                    $q->where(function($q2) use ($startOfRange) {
+                ->where(function ($q) use ($startOfRange, $endOfRange) {
+                    $q->where(function ($q2) use ($startOfRange) {
                         $q2->whereNull('shift_schedule_worker.end_date')
-                           ->orWhere('shift_schedule_worker.end_date', '>=', $startOfRange);
-                    })->where(function($q2) use ($endOfRange) {
+                            ->orWhere('shift_schedule_worker.end_date', '>=', $startOfRange);
+                    })->where(function ($q2) use ($endOfRange) {
                         $q2->whereNull('shift_schedule_worker.start_date')
-                           ->orWhere('shift_schedule_worker.start_date', '<=', $endOfRange);
+                            ->orWhere('shift_schedule_worker.start_date', '<=', $endOfRange);
                     });
                 })
-                // Ensure we don't show empty historical rows if the worker 
+                // Ensure we don't show empty historical rows if the worker
                 // stayed in the same month but different group
                 ->orderBy('shift_schedule_worker.start_date', 'desc')
                 ->orderBy('nombres');
         }]);
+
+        $visibleWorkerIds = $schedules
+            ->pluck('workers')
+            ->flatten(1)
+            ->pluck('id')
+            ->unique()
+            ->values();
+
+        $historyAssignments = collect();
+        $historySchedules = collect();
+
+        if ($visibleWorkerIds->isNotEmpty()) {
+            $historyAssignments = DB::table('shift_schedule_worker')
+                ->join('shift_schedules', 'shift_schedules.id', '=', 'shift_schedule_worker.shift_schedule_id')
+                ->where('shift_schedules.user_id', auth()->id())
+                ->whereIn('shift_schedule_worker.worker_id', $visibleWorkerIds)
+                ->where(function ($query) {
+                    $query->whereNull('shift_schedule_worker.end_date')
+                        ->orWhereColumn('shift_schedule_worker.start_date', '<=', 'shift_schedule_worker.end_date');
+                })
+                ->select(
+                    'shift_schedule_worker.worker_id',
+                    'shift_schedule_worker.shift_schedule_id as schedule_id',
+                    'shift_schedule_worker.start_date',
+                    'shift_schedule_worker.end_date'
+                )
+                ->distinct()
+                ->orderBy('shift_schedule_worker.worker_id')
+                ->orderByDesc('shift_schedule_worker.start_date')
+                ->get();
+
+            $historyScheduleIds = $historyAssignments
+                ->pluck('schedule_id')
+                ->unique()
+                ->values();
+
+            $historySchedules = ShiftSchedule::where('user_id', auth()->id())
+                ->whereIn('id', $historyScheduleIds)
+                ->get([
+                    'id',
+                    'name',
+                    'color',
+                    'work_days',
+                    'rest_days',
+                    'start_date',
+                    'end_date',
+                    'sort_order',
+                ]);
+        }
 
         $globalStartDateStr = ShiftSchedule::where('user_id', auth()->id())->min('start_date');
         $globalStartDate = $globalStartDateStr ? Carbon::parse($globalStartDateStr) : now();
@@ -77,10 +126,12 @@ class ShiftScheduleController extends Controller
         ];
 
         return Inertia::render('Shifts/Index', [
-            'year' => (int)$year,
-            'month' => (int)$month,
+            'year' => (int) $year,
+            'month' => (int) $month,
             'monthsData' => $monthsData,
             'schedules' => $schedules,
+            'historyAssignments' => $historyAssignments,
+            'historySchedules' => $historySchedules,
             'shiftDays' => $shiftDays,
             'minYear' => $globalStartDate->year,
             'minMonth' => $globalStartDate->month,
@@ -156,6 +207,7 @@ class ShiftScheduleController extends Controller
         }
 
         $schedule->delete();
+
         return redirect()->back();
     }
 
@@ -170,27 +222,50 @@ class ShiftScheduleController extends Controller
             'days.*.note' => 'nullable|string',
         ]);
 
-        \Log::info('Saving shift days payload:', $request->all());
+        $scheduleIds = collect($request->input('days', []))
+            ->pluck('shift_schedule_id')
+            ->filter()
+            ->unique()
+            ->values();
+
+        $ownedScheduleCount = ShiftSchedule::whereIn('id', $scheduleIds)
+            ->where('user_id', auth()->id())
+            ->count();
+
+        abort_unless($ownedScheduleCount === $scheduleIds->count(), 403);
+
+        \Log::info('Saving shift days payload', [
+            'user_id' => auth()->id(),
+            'days_count' => count($request->input('days', [])),
+            'schedule_ids' => $scheduleIds->all(),
+        ]);
 
         DB::transaction(function () use ($request) {
-            foreach ($request->days as $dayData) {
-                // Save all types including 'clear' so we can override base patterns
-                ShiftDay::updateOrCreate(
-                    [
-                        'shift_schedule_id' => $dayData['shift_schedule_id'],
-                        'worker_id' => $dayData['worker_id'],
-                        'date' => $dayData['date'],
-                    ],
-                    [
-                        'type' => $dayData['type'],
-                        'note' => $dayData['note'] ?? null,
-                    ]
-                );
-            }
+            $timestamp = now();
+
+            $rows = collect($request->days)
+                ->map(fn (array $dayData) => [
+                    'shift_schedule_id' => $dayData['shift_schedule_id'],
+                    'worker_id' => $dayData['worker_id'],
+                    'date' => $dayData['date'],
+                    'type' => $dayData['type'],
+                    'note' => $dayData['note'] ?? null,
+                    'created_at' => $timestamp,
+                    'updated_at' => $timestamp,
+                ])
+                ->all();
+
+            // Bulk upsert avoids one select/update pair per grid cell.
+            ShiftDay::upsert(
+                $rows,
+                ['shift_schedule_id', 'worker_id', 'date'],
+                ['type', 'note', 'updated_at']
+            );
         });
 
         return redirect()->back();
     }
+
     public function reorderSchedules(Request $request)
     {
         $request->validate([

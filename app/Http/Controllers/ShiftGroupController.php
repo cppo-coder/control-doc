@@ -13,6 +13,7 @@ class ShiftGroupController extends Controller
 {
     public function index(Request $request)
     {
+        $userId = auth()->id();
         $year = $request->query('year', now()->year);
         $month = $request->query('month', now()->month);
 
@@ -21,10 +22,10 @@ class ShiftGroupController extends Controller
         $endOfMonth = $date->copy()->endOfMonth()->format('Y-m-d');
 
         // Fetch groups intersecting this month
-        $schedules = ShiftSchedule::where('user_id', auth()->id())
+        $schedules = ShiftSchedule::where('user_id', $userId)
             ->where(function ($q) use ($startOfMonth) {
                 $q->whereNull('end_date')
-                  ->orWhere('end_date', '>=', $startOfMonth);
+                    ->orWhere('end_date', '>=', $startOfMonth);
             })
             ->where('start_date', '<=', $endOfMonth)
             ->with(['workers' => function ($query) {
@@ -37,24 +38,26 @@ class ShiftGroupController extends Controller
             ->get();
 
         // ONLY workers with NO active assignment (end_date is null) are "unassigned"
-        $assignedWorkerIds = DB::table('shift_schedule_worker')
-            ->whereNull('end_date')
-            ->pluck('worker_id')
-            ->toArray();
-
         $unassignedWorkers = Worker::select('id', 'nombres', 'apellido_paterno', 'apellido_materno', 'rut', 'position')
-            ->whereNotIn('id', $assignedWorkerIds)
+            ->whereNotExists(function ($query) use ($userId) {
+                $query->selectRaw('1')
+                    ->from('shift_schedule_worker')
+                    ->join('shift_schedules', 'shift_schedules.id', '=', 'shift_schedule_worker.shift_schedule_id')
+                    ->whereColumn('shift_schedule_worker.worker_id', 'workers.id')
+                    ->where('shift_schedules.user_id', $userId)
+                    ->whereNull('shift_schedule_worker.end_date');
+            })
             ->orderBy('nombres')
             ->get();
 
-        $globalStartDateStr = ShiftSchedule::where('user_id', auth()->id())->min('start_date');
+        $globalStartDateStr = ShiftSchedule::where('user_id', $userId)->min('start_date');
         $globalStartDate = $globalStartDateStr ? Carbon::parse($globalStartDateStr) : now();
 
         $maxDate = now()->addMonths(3);
 
         return Inertia::render('Shifts/Groups', [
-            'year' => (int)$year,
-            'month' => (int)$month,
+            'year' => (int) $year,
+            'month' => (int) $month,
             'schedules' => $schedules,
             'unassignedWorkers' => $unassignedWorkers,
             'minYear' => $globalStartDate->year,
@@ -69,29 +72,45 @@ class ShiftGroupController extends Controller
         $request->validate([
             'worker_ids' => 'required|array',
             'worker_ids.*' => 'exists:workers,id',
-            'start_date' => 'required|date',
+            'start_date' => 'nullable|date',
         ]);
 
         if ($schedule->user_id !== auth()->id()) {
             abort(403);
         }
 
-        $startDate = $request->start_date;
-        $yesterdayOfStart = date('Y-m-d', strtotime($startDate . ' -1 day'));
+        // Si no viene fecha, usamos el primero del mes seleccionado o el inicio del turno
+        $year = $request->input('year', now()->year);
+        $month = $request->input('month', now()->month);
 
-        // End previous active assignments for these workers
+        $startDate = $request->start_date ?: max(
+            date('Y-m-d', strtotime("$year-$month-01")),
+            $schedule->start_date
+        );
+
+        $yesterdayOfStart = date('Y-m-d', strtotime($startDate.' -1 day'));
+
+        // Finalizar asignaciones activas previas para estos trabajadores
         DB::table('shift_schedule_worker')
-            ->whereIn('worker_id', $request->worker_ids)
-            ->whereNull('end_date')
-            ->update(['end_date' => $yesterdayOfStart]);
+            ->join('shift_schedules', 'shift_schedules.id', '=', 'shift_schedule_worker.shift_schedule_id')
+            ->whereIn('shift_schedule_worker.worker_id', $request->worker_ids)
+            ->where('shift_schedules.user_id', auth()->id())
+            ->whereNull('shift_schedule_worker.end_date')
+            ->update(['shift_schedule_worker.end_date' => $yesterdayOfStart]);
 
-        // Create new assignments starting on the selected date
-        foreach ($request->worker_ids as $workerId) {
-            $schedule->workers()->attach($workerId, [
+        $timestamp = now();
+
+        // Crear nuevas asignaciones en bloque para evitar un insert por trabajador.
+        DB::table('shift_schedule_worker')->insert(
+            collect($request->worker_ids)->map(fn ($workerId) => [
+                'shift_schedule_id' => $schedule->id,
+                'worker_id' => $workerId,
                 'start_date' => $startDate,
-                'end_date'   => null,
-            ]);
-        }
+                'end_date' => null,
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
+            ])->all()
+        );
 
         return redirect()->back();
     }
@@ -102,7 +121,17 @@ class ShiftGroupController extends Controller
             abort(403);
         }
 
-        $schedule->workers()->detach($worker->id);
+        if ($request->force_delete) {
+            $schedule->workers()->detach($worker->id);
+        } else {
+            $endDate = $request->input('end_date', now()->format('Y-m-d'));
+
+            DB::table('shift_schedule_worker')
+                ->where('shift_schedule_id', $schedule->id)
+                ->where('worker_id', $worker->id)
+                ->whereNull('end_date')
+                ->update(['end_date' => $endDate]);
+        }
 
         return redirect()->back();
     }

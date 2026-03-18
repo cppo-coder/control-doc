@@ -1,18 +1,25 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    private function isPostgres(): bool
+    {
+        return DB::getDriverName() === 'pgsql';
+    }
+
     /**
      * Aplica mejoras de Seguridad (Auditoría Inmutable) y Rendimiento (Búsquedas GIN)
      * directamente en el motor PostgreSQL.
      */
     public function up(): void
     {
+        if (! $this->isPostgres()) {
+            return;
+        }
+
         // ── RENDIMIENTO: Habilitar extensión de trigramas para búsquedas rápidas ──
         DB::statement('CREATE EXTENSION IF NOT EXISTS pg_trgm');
 
@@ -22,7 +29,7 @@ return new class extends Migration
         DB::statement('CREATE INDEX workers_apellidos_trgm_idx ON workers USING gin (apellido_paterno gin_trgm_ops)');
 
         // ── SEGURIDAD: Auditoría a nivel de motor (Triggers) ─────────────────
-        
+
         // 1. Crear función para registrar auditoría automáticamente
         DB::statement("
             CREATE OR REPLACE FUNCTION log_worker_changes()
@@ -63,11 +70,11 @@ return new class extends Migration
         ");
 
         // 2. Adjuntar trigger a la tabla workers
-        DB::statement("
+        DB::statement('
             CREATE TRIGGER trg_audit_worker_changes
             AFTER UPDATE OR DELETE ON workers
             FOR EACH ROW EXECUTE FUNCTION log_worker_changes();
-        ");
+        ');
 
         // ── INTEGRIDAD: Constraints de limpieza ──
         DB::statement("ALTER TABLE workers ADD CONSTRAINT check_email_format CHECK (email ~* '^[A-Za-z0-9._%%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$')");
@@ -78,6 +85,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (! $this->isPostgres()) {
+            return;
+        }
+
         DB::statement('DROP TRIGGER IF EXISTS trg_audit_worker_changes ON workers');
         DB::statement('DROP FUNCTION IF EXISTS log_worker_changes()');
         DB::statement('DROP INDEX IF EXISTS workers_nombres_trgm_idx');

@@ -112,4 +112,20 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Local Auto Login
+    |--------------------------------------------------------------------------
+    |
+    | Permite iniciar sesión automáticamente en desarrollo local para evitar
+    | pasar por la pantalla de login mientras se trabaja en la app.
+    |
+    */
+
+    'local_auto_login' => [
+        'enabled' => env('LOCAL_AUTO_LOGIN', false),
+        'user_id' => env('LOCAL_AUTO_LOGIN_USER_ID'),
+        'user_email' => env('LOCAL_AUTO_LOGIN_USER_EMAIL'),
+    ],
+
 ];

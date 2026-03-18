@@ -5,9 +5,11 @@ import { useState } from 'react';
 export default function AuthenticatedLayout({ header, children }) {
     const { props, url } = usePage();
     const user = props.auth.user;
+    const isAdmin = Boolean(user?.roles?.includes('admin'));
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [personalMenuOpen, setPersonalMenuOpen] = useState(route().current('workers.*'));
     const [shiftsMenuOpen, setShiftsMenuOpen] = useState(route().current('shifts.*'));
+    const [adminMenuOpen, setAdminMenuOpen] = useState(route().current('admin.*'));
     const isProjectsOrCategories = route().current('projects.*') || url.includes('/categories');
 
     return (
@@ -116,6 +118,15 @@ export default function AuthenticatedLayout({ header, children }) {
                                     Listado Maestro
                                 </Link>
                                 <Link
+                                    href={route('workers.checklist')}
+                                    className={`block px-3 py-2 rounded-lg text-[12px] font-medium transition-all ${route().current('workers.checklist')
+                                        ? 'bg-[#EEF2FF] text-[#5340FF]'
+                                        : 'text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827]'
+                                        }`}
+                                >
+                                    Check List
+                                </Link>
+                                <Link
                                     href={route('workers.import')}
                                     className={`block px-3 py-2 rounded-lg text-[12px] font-medium transition-all ${route().current('workers.import')
                                         ? 'bg-[#EEF2FF] text-[#5340FF]'
@@ -193,6 +204,46 @@ export default function AuthenticatedLayout({ header, children }) {
                         </svg>
                         Cursos
                     </Link>
+
+                    {isAdmin && (
+                        <div className="pt-4">
+                            <p className="px-3 mb-3 text-[10px] font-bold text-[#9CA3AF] uppercase tracking-[0.12em]">Administración</p>
+                            <div className="space-y-1">
+                                <button
+                                    onClick={() => setAdminMenuOpen(!adminMenuOpen)}
+                                    className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all hover:bg-[#F9FAFB] group ${route().current('admin.*')
+                                        ? 'text-[#5340FF]'
+                                        : 'text-[#6B7280]'
+                                        }`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <svg className={`w-[18px] h-[18px] shrink-0 ${route().current('admin.*') ? 'text-[#5340FF]' : 'text-[#9CA3AF] group-hover:text-[#111827]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 3a1.5 1.5 0 011.5 1.5v.568a6.994 6.994 0 011.5.62l.402-.402a1.5 1.5 0 012.121 0l1.061 1.06a1.5 1.5 0 010 2.122l-.401.402a6.955 6.955 0 01.619 1.498h.568a1.5 1.5 0 011.5 1.5v1.5a1.5 1.5 0 01-1.5 1.5h-.568a6.956 6.956 0 01-.619 1.498l.401.402a1.5 1.5 0 010 2.121l-1.06 1.061a1.5 1.5 0 01-2.122 0l-.402-.401a6.994 6.994 0 01-1.499.619v.568a1.5 1.5 0 01-1.5 1.5h-1.5a1.5 1.5 0 01-1.5-1.5v-.568a6.994 6.994 0 01-1.499-.619l-.402.401a1.5 1.5 0 01-2.122 0l-1.06-1.061a1.5 1.5 0 010-2.121l.401-.402a6.956 6.956 0 01-.619-1.498H3a1.5 1.5 0 01-1.5-1.5v-1.5A1.5 1.5 0 013 10.5h.568a6.956 6.956 0 01.619-1.498l-.401-.402a1.5 1.5 0 010-2.122l1.06-1.06a1.5 1.5 0 012.122 0l.402.402a6.994 6.994 0 011.499-.62V4.5A1.5 1.5 0 019.75 3z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15.25A3.25 3.25 0 1012 8.75a3.25 3.25 0 000 6.5z" />
+                                        </svg>
+                                        Administración
+                                    </div>
+                                    <svg className={`w-3.5 h-3.5 transition-transform duration-300 ${adminMenuOpen ? 'rotate-180' : ''} ${route().current('admin.*') ? 'text-[#5340FF]' : 'text-[#9CA3AF]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+
+                                {adminMenuOpen && (
+                                    <div className="pl-9 space-y-1 animate-in slide-in-from-top-2 duration-200">
+                                        <Link
+                                            href={route('admin.ai-status.index')}
+                                            className={`block px-3 py-2 rounded-lg text-[12px] font-medium transition-all ${route().current('admin.ai-status.*')
+                                                ? 'bg-[#EEF2FF] text-[#5340FF]'
+                                                : 'text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827]'
+                                                }`}
+                                        >
+                                            IA y NotebookLM
+                                        </Link>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </nav>
 
                 {/* User Footer */}
@@ -225,17 +276,7 @@ export default function AuthenticatedLayout({ header, children }) {
                             </svg>
                         </button>
 
-                        {/* Search */}
-                        <div className="hidden sm:flex items-center gap-2 bg-[#F3F4F8] rounded-xl px-3 py-2 w-64">
-                            <svg className="w-4 h-4 text-[#9CA3AF] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                            </svg>
-                            <input
-                                type="text"
-                                placeholder="Buscar..."
-                                className="bg-transparent text-[13px] text-[#374151] placeholder-[#9CA3AF] focus:outline-none w-full"
-                            />
-                        </div>
+
                     </div>
 
                     <div className="flex items-center gap-3">

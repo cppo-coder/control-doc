@@ -3,7 +3,7 @@ import { Head, useForm, router } from '@inertiajs/react';
 import { useState, useMemo } from 'react';
 import { useConfirm } from '@/Components/ConfirmModal';
 
-export default function Index({ courses, workers }) {
+export default function Index({ courses }) {
     const { data, setData, post, patch, processing, errors, reset, delete: destroy } = useForm({
         id: null,
         worker_id: null,

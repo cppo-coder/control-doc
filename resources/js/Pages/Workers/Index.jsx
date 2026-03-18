@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useConfirm } from '@/Components/ConfirmModal';
 
 export default function Index({ workers, auth, selectedWorker }) {
+    const canManageWorkers = auth.user.permissions.includes('workers.create') || auth.user.permissions.includes('workers.edit');
+
     const { data, setData, post, patch, processing, errors, reset, delete: destroy } = useForm({
         id: null,
         rut: '',
@@ -13,6 +15,7 @@ export default function Index({ workers, auth, selectedWorker }) {
         nombres: '',
         apellido_paterno: '',
         apellido_materno: '',
+        sexo: '',
         fecha_nacimiento: '',
         estado_civil: '',
         direccion: '',
@@ -32,6 +35,10 @@ export default function Index({ workers, auth, selectedWorker }) {
         position: '',
         department: '',
         is_active: true,
+        licencia_conduccion_vencimiento: '',
+        tipo_contrato: 'Indefinido',
+        contrato_inicio: '',
+        contrato_termino: '',
     });
 
     const { confirmModal, askConfirm } = useConfirm();
@@ -42,12 +49,12 @@ export default function Index({ workers, auth, selectedWorker }) {
 
     // Cargar trabajador automáticamente si viene seleccionado (por ID o prop)
     useEffect(() => {
-        if (selectedWorker) {
+        if (selectedWorker && canManageWorkers) {
             handleEdit(selectedWorker);
             // Limpiar el ID de la URL si se cargó por prop seleccionada
             window.history.replaceState({}, '', route('workers.index'));
         }
-    }, [selectedWorker]);
+    }, [selectedWorker, canManageWorkers]);
 
     const showToast = (message, type = 'success') => {
         setToast({ message, type });
@@ -127,7 +134,7 @@ export default function Index({ workers, auth, selectedWorker }) {
 
     const handleIdChange = (e, field) => {
         const val = e.target.value;
-        if (field === 'rut' || (field === 'documento_identidad' && data.nacionalidad !== 'Chilena')) {
+        if (field === 'rut' || (field === 'documento_identidad' && data.nacionalidad?.toString().toLowerCase() !== 'chilena')) {
             const { formatted, isValid } = formatAndValidateRut(val);
             setData(field, formatted);
             // Optional: You could set a local error state here if you want immediate red text
@@ -169,6 +176,7 @@ export default function Index({ workers, auth, selectedWorker }) {
             nombres: worker.nombres || '',
             apellido_paterno: worker.apellido_paterno || '',
             apellido_materno: worker.apellido_materno || '',
+            sexo: worker.sexo || '',
             fecha_nacimiento: worker.fecha_nacimiento ? worker.fecha_nacimiento.split('T')[0] : '',
             estado_civil: worker.estado_civil || '',
             direccion: worker.direccion || '',
@@ -188,9 +196,15 @@ export default function Index({ workers, auth, selectedWorker }) {
             position: worker.position || '',
             department: worker.department || '',
             is_active: worker.is_active ?? true,
+            licencia_conduccion_vencimiento: worker.licencia_conduccion_vencimiento
+                ? worker.licencia_conduccion_vencimiento.split('T')[0]
+                : '',
+            tipo_contrato: worker.tipo_contrato || 'Indefinido',
+            contrato_inicio: worker.contrato_inicio ? worker.contrato_inicio.split('T')[0] : '',
+            contrato_termino: worker.contrato_termino ? worker.contrato_termino.split('T')[0] : '',
         });
 
-        if (worker.nacionalidad && worker.nacionalidad !== 'Chilena') {
+        if (worker.nacionalidad && worker.nacionalidad.toString().toLowerCase() !== 'chilena') {
             setIdType('pasaporte');
         } else {
             setIdType('rut');
@@ -250,6 +264,11 @@ export default function Index({ workers, auth, selectedWorker }) {
             <div className="w-full max-w-5xl mx-auto pb-12 px-4 sm:px-6 lg:px-8">
                 <div className="bg-white rounded-3xl border border-[#EAECF0] shadow-[0_8px_30px_rgba(83,64,255,0.06)] overflow-hidden">
                     <div className="p-6 md:p-8">
+                        {!canManageWorkers ? (
+                            <div className="rounded-2xl border border-[#EAECF0] bg-[#F9FAFB] px-6 py-5 text-[14px] font-medium text-[#6B7280]">
+                                Tu rol tiene acceso de solo lectura al expediente del personal. Para crear o editar fichas necesitas permisos de supervisor o administrador.
+                            </div>
+                        ) : (
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-6 border-b border-[#F3F4F6]">
                             <div className="flex items-center gap-4">
                                 <div className="w-10 h-10 bg-gradient-to-br from-[#5340FF] to-[#8275FF] rounded-xl flex items-center justify-center text-white shadow-md shadow-indigo-200/50 cursor-default">
@@ -277,7 +296,9 @@ export default function Index({ workers, auth, selectedWorker }) {
                                 </div>
                             )}
                         </div>
+                        )}
 
+                        {canManageWorkers && (
                         <form onSubmit={handleSubmit} className="space-y-8">
                             {/* SECCION 1: IDENTIFICACION */}
                             <div className="space-y-5">
@@ -288,8 +309,42 @@ export default function Index({ workers, auth, selectedWorker }) {
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-end">
+                                    <div className="col-span-1">
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Nacionalidad <span className="text-red-500">*</span></label>
+                                        <div className="relative flex items-center">
+                                            <select
+                                                value={data.nacionalidad}
+                                                required
+                                                onChange={e => {
+                                                    const val = e.target.value;
+                                                    setData('nacionalidad', val);
+                                                    if (val && val.toString().toLowerCase() !== 'chilena') {
+                                                        setIdType('pasaporte');
+                                                    } else {
+                                                        setIdType('rut');
+                                                    }
+                                                }}
+                                                className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#5340FF]/10 focus:border-[#5340FF] focus:bg-white transition-all outline-none shadow-sm appearance-none cursor-pointer pr-12"
+                                                style={{ backgroundImage: 'none' }}
+                                            >
+                                                <option value="Chilena">Chilena 🇨🇱</option>
+                                                <option value="Peruana">Peruana 🇵🇪</option>
+                                                <option value="Mexicana">Mexicana 🇲🇽</option>
+                                                <option value="Canadiense">Canadiense 🇨🇦</option>
+                                            </select>
+                                            <div className="absolute right-6 pointer-events-none">
+                                                <svg className="w-4 h-4 text-[#9CA3AF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </div>
+                                        </div>
+                                        {errors.nacionalidad && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.nacionalidad}</p>}
+                                    </div>
+
                                     <div className="xl:col-span-2">
-                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">Documento Principal <span className="text-red-500">*</span></label>
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1">
+                                            {data.nacionalidad?.toString().toLowerCase() === 'chilena' ? 'RUT (Principal)' : 'Pasaporte (Principal)'} <span className="text-red-500">*</span>
+                                        </label>
                                         <div className="relative flex items-center group">
                                             <div className="absolute left-0 w-[64px] h-full flex items-center justify-center border-r border-[#EAECF0]">
                                                 <span className="text-[11px] font-black text-[#5340FF] uppercase tracking-wider">
@@ -311,49 +366,17 @@ export default function Index({ workers, auth, selectedWorker }) {
                                     </div>
 
                                     <div className="col-span-1">
-                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Nacionalidad <span className="text-red-500">*</span></label>
-                                        <div className="relative flex items-center">
-                                            <select
-                                                value={data.nacionalidad}
-                                                required
-                                                onChange={e => {
-                                                    const val = e.target.value;
-                                                    setData('nacionalidad', val);
-                                                    if (val && val !== 'Chilena') {
-                                                        setIdType('pasaporte');
-                                                    } else if (val === 'Chilena') {
-                                                        setIdType('rut');
-                                                    }
-                                                }}
-                                                className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#5340FF]/10 focus:border-[#5340FF] focus:bg-white transition-all outline-none shadow-sm appearance-none cursor-pointer pr-12"
-                                                style={{ backgroundImage: 'none' }}
-                                            >
-                                                <option value="Chilena">Chilena 🇨🇱</option>
-                                                <option value="Mexicana">Mexicana 🇲🇽</option>
-                                                <option value="Peruana">Peruana 🇵🇪</option>
-                                                <option value="Canadiense">Canadiense 🇨🇦</option>
-                                            </select>
-                                            <div className="absolute right-6 pointer-events-none">
-                                                <svg className="w-4 h-4 text-[#9CA3AF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </div>
-                                        </div>
-                                        {errors.nacionalidad && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.nacionalidad}</p>}
-                                    </div>
-
-                                    <div className="col-span-1">
                                         <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">
-                                            {(data.nacionalidad && data.nacionalidad !== 'Chilena') ? 'RUT / ID Chile' : 'Número de Pasaporte'}
+                                            {(data.nacionalidad?.toString().toLowerCase() !== 'chilena') ? 'RUT / ID Chile (Opcional)' : 'Nº Pasaporte (Opcional)'}
                                         </label>
                                         <input
                                             type="text"
                                             value={data.documento_identidad}
                                             onChange={e => handleIdChange(e, 'documento_identidad')}
-                                            className={`w-full h-11 px-5 rounded-xl border ${data.documento_identidad && data.nacionalidad !== 'Chilena' && !formatAndValidateRut(data.documento_identidad).isValid ? 'border-red-300 bg-red-50/30' : 'border-[#EAECF0] bg-[#F9FAFB]'} text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#5340FF]/10 focus:border-[#5340FF] focus:bg-white transition-all outline-none shadow-sm`}
-                                            placeholder={(data.nacionalidad && data.nacionalidad !== 'Chilena') ? '12.345.678-9' : 'Nº Pasaporte'}
+                                            className={`w-full h-11 px-5 rounded-xl border ${data.documento_identidad && data.nacionalidad?.toString().toLowerCase() !== 'chilena' && !formatAndValidateRut(data.documento_identidad).isValid ? 'border-red-300 bg-red-50/30' : 'border-[#EAECF0] bg-[#F9FAFB]'} text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#5340FF]/10 focus:border-[#5340FF] focus:bg-white transition-all outline-none shadow-sm`}
+                                            placeholder={(data.nacionalidad?.toString().toLowerCase() !== 'chilena') ? '12.345.678-9' : 'Nº Pasaporte'}
                                         />
-                                        {data.documento_identidad && data.nacionalidad !== 'Chilena' && !formatAndValidateRut(data.documento_identidad).isValid && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1 flex items-center gap-1"><span className="w-1 h-1 bg-red-500 rounded-full"></span>RUT no válido</p>}
+                                        {data.documento_identidad && data.nacionalidad?.toString().toLowerCase() !== 'chilena' && !formatAndValidateRut(data.documento_identidad).isValid && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1 flex items-center gap-1"><span className="w-1 h-1 bg-red-500 rounded-full"></span>RUT no válido</p>}
                                         {errors.documento_identidad && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.documento_identidad}</p>}
                                     </div>
                                 </div>
@@ -383,6 +406,28 @@ export default function Index({ workers, auth, selectedWorker }) {
                                         {errors.apellido_materno && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.apellido_materno}</p>}
                                     </div>
                                     <div className="col-span-1">
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Sexo <span className="text-red-500">*</span></label>
+                                        <div className="relative flex items-center">
+                                            <select
+                                                required
+                                                value={data.sexo}
+                                                onChange={e => setData('sexo', e.target.value)}
+                                                className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#5340FF]/10 focus:border-[#5340FF] focus:bg-white transition-all outline-none shadow-sm appearance-none cursor-pointer pr-12"
+                                                style={{ backgroundImage: 'none' }}
+                                            >
+                                                <option value="" disabled>Seleccione...</option>
+                                                <option value="Masculino">Masculino</option>
+                                                <option value="Femenino">Femenino</option>
+                                            </select>
+                                            <div className="absolute right-6 pointer-events-none">
+                                                <svg className="w-4 h-4 text-[#9CA3AF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </div>
+                                        </div>
+                                        {errors.sexo && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.sexo}</p>}
+                                    </div>
+                                    <div className="col-span-1">
                                         <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Fecha de Nacimiento <span className="text-red-500">*</span></label>
                                         <input type="date" required value={data.fecha_nacimiento} onChange={e => setData('fecha_nacimiento', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#5340FF]/10 focus:border-[#5340FF] focus:bg-white transition-all outline-none shadow-sm" />
                                         {errors.fecha_nacimiento && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.fecha_nacimiento}</p>}
@@ -408,6 +453,16 @@ export default function Index({ workers, auth, selectedWorker }) {
                                             </div>
                                         </div>
                                         {errors.estado_civil && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.estado_civil}</p>}
+                                    </div>
+                                    <div className="col-span-1">
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Venc. Lic. Conducción</label>
+                                        <input
+                                            type="date"
+                                            value={data.licencia_conduccion_vencimiento}
+                                            onChange={e => setData('licencia_conduccion_vencimiento', e.target.value)}
+                                            className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#5340FF]/10 focus:border-[#5340FF] focus:bg-white transition-all outline-none shadow-sm"
+                                        />
+                                        {errors.licencia_conduccion_vencimiento && <p className="mt-2 text-[11px] text-red-500 font-bold ml-1">{errors.licencia_conduccion_vencimiento}</p>}
                                     </div>
                                 </div>
                             </div>
@@ -477,7 +532,7 @@ export default function Index({ workers, auth, selectedWorker }) {
                                     <div className="flex-1 h-[1.5px] bg-gradient-to-r from-[#F3F4F6] to-transparent"></div>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 items-end">
-                                    {data.nacionalidad === 'Chilena' && (
+                                    {data.nacionalidad?.toString().toLowerCase() === 'chilena' && (
                                         <>
                                             <div className="col-span-1">
                                                 <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Entidad Bancaria <span className="text-red-500">*</span></label>
@@ -531,7 +586,7 @@ export default function Index({ workers, auth, selectedWorker }) {
                                         </>
                                     )}
 
-                                    {data.nacionalidad && data.nacionalidad !== 'Chilena' && (
+                                    {data.nacionalidad && data.nacionalidad.toString().toLowerCase() !== 'chilena' && (
                                         <>
                                             <div className="col-span-1">
                                                 <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Dirección Beneficiario <span className="text-red-500">*</span></label>
@@ -595,6 +650,49 @@ export default function Index({ workers, auth, selectedWorker }) {
                                 </div>
                             </div>
 
+                            {/* SECCION 7: INFORMACIÓN CONTRACTUAL */}
+                            <div className="space-y-5">
+                                <div className="flex items-center gap-5">
+                                    <div className="flex items-center justify-center w-10 h-10 rounded-2xl bg-[#7C3AED] text-white text-sm font-black shadow-lg shadow-violet-100 ring-4 ring-violet-50/50 transition-transform hover:scale-105 cursor-default">7</div>
+                                    <h4 className="text-[13px] font-black text-[#111827] uppercase tracking-[0.2em]">Condiciones Contractuales</h4>
+                                    <div className="flex-1 h-[1.5px] bg-gradient-to-r from-[#F3F4F6] to-transparent"></div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-end">
+                                    <div className="col-span-1">
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Tipo de Contrato</label>
+                                        <div className="relative flex items-center">
+                                            <select
+                                                value={data.tipo_contrato}
+                                                onChange={e => setData('tipo_contrato', e.target.value)}
+                                                className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#7C3AED]/10 focus:border-[#7C3AED] focus:bg-white transition-all outline-none shadow-sm appearance-none cursor-pointer pr-12"
+                                                style={{ backgroundImage: 'none' }}
+                                            >
+                                                <option value="Indefinido">Indefinido</option>
+                                                <option value="Plazo Fijo">Plazo Fijo</option>
+                                                <option value="Por Obra o Faena">Por Obra o Faena</option>
+                                                <option value="Part-Time">Part-Time</option>
+                                                <option value="Honorarios">Honorarios</option>
+                                            </select>
+                                            <div className="absolute right-6 pointer-events-none">
+                                                <svg className="w-4 h-4 text-[#9CA3AF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="col-span-1">
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Fecha Inicio Contrato</label>
+                                        <input type="date" value={data.contrato_inicio} onChange={e => setData('contrato_inicio', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#7C3AED]/10 focus:border-[#7C3AED] focus:bg-white transition-all outline-none shadow-sm" />
+                                    </div>
+                                    <div className="col-span-1">
+                                        <label className="block text-[11px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1.5 ml-1 whitespace-nowrap">Fecha Término (Si aplica)</label>
+                                        <input type="date" value={data.contrato_termino} onChange={e => setData('contrato_termino', e.target.value)} className="w-full h-11 px-5 rounded-xl border border-[#EAECF0] bg-[#F9FAFB] text-[15px] font-bold text-[#111827] focus:ring-4 focus:ring-[#7C3AED]/10 focus:border-[#7C3AED] focus:bg-white transition-all outline-none shadow-sm" />
+                                    </div>
+                                </div>
+                            </div>
+
+
+
                             <div className="flex flex-col items-center justify-center gap-4 pt-6 border-t border-[#F3F4F6]">
                                 <div className="w-full max-w-md flex flex-col sm:flex-row gap-3">
                                     <button
@@ -625,6 +723,7 @@ export default function Index({ workers, auth, selectedWorker }) {
                                 <p className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-[0.3em]">Sistema de Control Documental Electrónico v2.0</p>
                             </div>
                         </form>
+                        )}
                     </div>
                 </div>
             </div>

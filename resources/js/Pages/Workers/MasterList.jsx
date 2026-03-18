@@ -3,6 +3,40 @@ import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import { useConfirm } from '@/Components/ConfirmModal';
 
+function normalizePaginationLabel(label) {
+    if (label.includes('&laquo;') || label.includes('Previous')) return 'prev';
+    if (label.includes('&raquo;') || label.includes('Next')) return 'next';
+    if (label.includes('...')) return 'ellipsis';
+    return 'page';
+}
+
+function buildPaginationItems(paginated) {
+    const links = paginated.links ?? [];
+
+    if (links.length > 0) {
+        return links.map((link) => ({
+            ...link,
+            key: `${link.label}-${link.url ?? 'null'}`,
+        }));
+    }
+
+    return [
+        { key: 'prev', label: 'Previous', url: null, active: false },
+        { key: 'page-1', label: String(paginated.current_page ?? 1), url: null, active: true },
+        { key: 'next', label: 'Next', url: null, active: false },
+    ];
+}
+
+function visitPagination(url) {
+    if (!url) return;
+
+    router.get(url, {}, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    });
+}
+
 export default function MasterList({ auth, workers, filters }) {
     const [search, setSearch] = useState(filters.search || '');
     const [toast, setToast] = useState(null);
@@ -13,11 +47,15 @@ export default function MasterList({ auth, workers, filters }) {
     };
 
     const { confirmModal, askConfirm } = useConfirm();
+    const paginationItems = buildPaginationItems(workers);
 
     // Server side filtered via workers.data
     const filteredWorkers = workers.data;
 
+    const hasPermission = (name) => auth.user.permissions.includes(name);
+
     const handleDelete = (id) => {
+        if (!hasPermission('workers.delete')) return;
         askConfirm({
             title: '¿Eliminar trabajador?',
             message: '¿Estás seguro de que deseas eliminar este trabajador? Todos sus registros asociados se verán afectados.',
@@ -38,18 +76,20 @@ export default function MasterList({ auth, workers, filters }) {
             header={
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
-                        <h2 className="text-2xl font-extrabold text-[#111827] tracking-tight">Listado Maestro de Personal</h2>
+                                    <h2 className="text-2xl font-extrabold text-[#111827] tracking-tight">Listado Maestro de Personal</h2>
                         <p className="text-[13px] text-[#6B7280] font-medium mt-1">Gestión centralizada de todos los trabajadores registrados.</p>
                     </div>
-                    <Link
-                        href={route('workers.index')}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#5340FF] text-white rounded-xl text-[13px] font-bold shadow-lg shadow-indigo-100 hover:bg-[#4534D9] transition-all transform hover:-translate-y-0.5"
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                        </svg>
-                        Registrar Nuevo
-                    </Link>
+                    {hasPermission('workers.create') && (
+                        <Link
+                            href={route('workers.index')}
+                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#5340FF] text-white rounded-xl text-[13px] font-bold shadow-lg shadow-indigo-100 hover:bg-[#4534D9] transition-all transform hover:-translate-y-0.5"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                            </svg>
+                            Registrar Nuevo
+                        </Link>
+                    )}
                 </div>
             }
         >
@@ -107,7 +147,9 @@ export default function MasterList({ auth, workers, filters }) {
                             <tr className="bg-[#F9FAFB]">
                                 <th className="px-6 py-4 text-[11px] font-bold text-[#9CA3AF] uppercase tracking-wider">Trabajador</th>
                                 <th className="px-6 py-4 text-[11px] font-bold text-[#9CA3AF] uppercase tracking-wider">Identificación</th>
+                                <th className="px-6 py-4 text-[11px] font-bold text-[#9CA3AF] uppercase tracking-wider">Sexo</th>
                                 <th className="px-6 py-4 text-[11px] font-bold text-[#9CA3AF] uppercase tracking-wider">Cargo / Depto</th>
+                                <th className="px-6 py-4 text-[11px] font-bold text-[#9CA3AF] uppercase tracking-wider">Licencia</th>
                                 <th className="px-6 py-4 text-[11px] font-bold text-[#9CA3AF] uppercase tracking-wider">Contacto</th>
                                 <th className="px-6 py-4 text-[11px] font-bold text-[#9CA3AF] uppercase tracking-wider">Estado</th>
                                 <th className="px-6 py-4 text-[11px] font-bold text-[#9CA3AF] uppercase tracking-wider text-right">Acciones</th>
@@ -140,12 +182,38 @@ export default function MasterList({ auth, workers, filters }) {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
+                                            <span className="text-[13px] text-[#374151] font-medium">
+                                                {worker.sexo || 'S/I'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
                                             <p className="text-[13px] font-semibold text-[#374151] leading-tight">
                                                 {worker.position || 'No asignado'}
                                             </p>
                                             <p className="text-[11px] text-[#9CA3AF] mt-0.5">
                                                 {worker.department || 'Sin depto'}
                                             </p>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {worker.licencia_conduccion_vencimiento ? (
+                                                <div className="flex flex-col">
+                                                    <span className="text-[12px] font-bold text-[#374151]">
+                                                        {new Date(worker.licencia_conduccion_vencimiento).toLocaleDateString()}
+                                                    </span>
+                                                    {(() => {
+                                                        const hoy = new Date();
+                                                        const vence = new Date(worker.licencia_conduccion_vencimiento);
+                                                        const dias = Math.ceil((vence - hoy) / (1000 * 60 * 60 * 24));
+                                                        return dias < 0 ? (
+                                                            <span className="text-[10px] text-red-500 font-black tracking-tighter">VENCIDA</span>
+                                                        ) : (dias <= 30 ? (
+                                                            <span className="text-[10px] text-amber-500 font-black tracking-tighter">VENCE PRONTO</span>
+                                                        ) : null);
+                                                    })()}
+                                                </div>
+                                            ) : (
+                                                <span className="text-[12px] text-[#9CA3AF] italic">N/A</span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col gap-1">
@@ -167,27 +235,31 @@ export default function MasterList({ auth, workers, filters }) {
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">
-                                                <button
-                                                    onClick={() => router.get(route('workers.index', { id: worker.id }))}
-                                                    className="p-2 text-[#9CA3AF] hover:text-[#5340FF] hover:bg-[#EEF2FF] rounded-lg transition-colors"
-                                                    title="Editar Ficha"
-                                                >
-                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(worker.id)}
-                                                    className="p-2 text-[#9CA3AF] hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                                    title="Eliminar"
-                                                >
-                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                                </button>
+                                                {hasPermission('workers.edit') && (
+                                                    <button
+                                                        onClick={() => router.get(route('workers.index', { id: worker.id }))}
+                                                        className="p-2 text-[#9CA3AF] hover:text-[#5340FF] hover:bg-[#EEF2FF] rounded-lg transition-colors"
+                                                        title="Editar Ficha"
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                                    </button>
+                                                )}
+                                                {hasPermission('workers.delete') && (
+                                                    <button
+                                                        onClick={() => handleDelete(worker.id)}
+                                                        className="p-2 text-[#9CA3AF] hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                                        title="Eliminar"
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan="6" className="px-6 py-20 text-center">
+                                    <td colSpan="8" className="px-6 py-20 text-center">
                                         <div className="flex flex-col items-center">
                                             <div className="w-16 h-16 bg-[#F3F4F8] rounded-full flex items-center justify-center mb-4">
                                                 <svg className="w-8 h-8 text-[#9CA3AF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
@@ -202,36 +274,69 @@ export default function MasterList({ auth, workers, filters }) {
                     </table>
                 </div>
 
-                {/* Footer / Pagination Placeholder */}
-                {/* Pagination */}
-                <div className="px-6 py-4 bg-[#F9FAFB] border-t border-[#EAECF0] flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        {workers.links.map((link, i) => (
-                            !link.url ? (
-                                <span
-                                    key={i}
-                                    className={`min-w-[32px] h-8 flex items-center justify-center rounded-lg text-[12px] font-bold transition-all text-[#9CA3AF] cursor-not-allowed opacity-50`}
-                                    dangerouslySetInnerHTML={{ __html: link.label }}
-                                />
-                            ) : (
-                                <Link
-                                    key={i}
-                                    href={link.url}
-                                    className={`min-w-[32px] h-8 flex items-center justify-center rounded-lg text-[12px] font-bold transition-all
-                                        ${link.active
-                                            ? 'bg-[#5340FF] text-white shadow-md'
-                                            : 'text-[#6B7280] hover:bg-white hover:text-[#5340FF] border border-transparent hover:border-[#EAECF0]'
+                <div className="border-t border-[#EAECF0] bg-white px-6 py-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <p className="text-[13px] font-medium text-[#6B7280]">
+                            Showing {workers.from ?? 0} to {workers.to ?? 0} of {workers.total ?? 0} entries
+                        </p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            {paginationItems.map((link) => {
+                                const labelType = normalizePaginationLabel(link.label);
+                                const displayLabel = labelType === 'prev'
+                                    ? 'Previous'
+                                    : labelType === 'next'
+                                        ? 'Next'
+                                        : labelType === 'ellipsis'
+                                            ? '...'
+                                            : link.label;
+
+                                if (labelType === 'ellipsis') {
+                                    return (
+                                        <span
+                                            key={link.key}
+                                            className="flex h-9 min-w-[36px] items-center justify-center px-1 text-[13px] font-medium text-[#9CA3AF]"
+                                        >
+                                            {displayLabel}
+                                        </span>
+                                    );
+                                }
+
+                                if (!link.url) {
+                                    return (
+                                        <span
+                                            key={link.key}
+                                            className={`flex h-9 items-center justify-center text-[13px] font-medium ${
+                                                labelType === 'page'
+                                                    ? 'min-w-[36px] rounded-full text-[#9CA3AF] opacity-50'
+                                                    : 'min-w-[72px] rounded-lg border border-[#E5E7EB] px-3 text-[#9CA3AF] opacity-50'
+                                            }`}
+                                        >
+                                            {displayLabel}
+                                        </span>
+                                    );
+                                }
+
+                                return (
+                                    <button
+                                        key={link.key}
+                                        type="button"
+                                        onClick={() => visitPagination(link.url)}
+                                        className={`flex h-9 items-center justify-center text-[13px] font-medium transition-all ${
+                                            labelType === 'page'
+                                                ? (link.active
+                                                    ? 'min-w-[36px] rounded-full bg-[#1D4ED8] text-white'
+                                                    : 'min-w-[36px] rounded-full text-[#2563EB] hover:bg-[#EFF6FF]')
+                                                : 'min-w-[72px] rounded-lg border border-[#E5E7EB] px-3 text-[#64748B] hover:bg-[#F8FAFC]'
                                         }`}
-                                    dangerouslySetInnerHTML={{ __html: link.label }}
-                                />
-                            )
-                        ))}
+                                    >
+                                        {displayLabel}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
-                    <p className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wider">
-                        Sistema de Control Documental • Personal
-                    </p>
                 </div>
             </div>
-        </AuthenticatedLayout>
+        </AuthenticatedLayout >
     );
 }

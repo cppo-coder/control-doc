@@ -3,8 +3,57 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import { useConfirm } from '@/Components/ConfirmModal';
 
+const getTodayDateString = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
+};
+
 export default function Groups({ year, month, schedules, unassignedWorkers, minYear, minMonth, maxYear, maxMonth }) {
     const { confirmModal, askConfirm } = useConfirm();
+
+    const [datePromptModal, setDatePromptModal] = useState({
+        isOpen: false,
+        action: null,
+        scheduleId: null,
+        workerIds: [],
+        workerId: null,
+        date: `${year}-${String(month).padStart(2, '0')}-01`,
+        title: '',
+        message: ''
+    });
+
+    const confirmDatePrompt = (forceDelete = false) => {
+        if (datePromptModal.action === 'assign') {
+            router.post(route('shifts.groups.assign', datePromptModal.scheduleId), {
+                worker_ids: datePromptModal.workerIds,
+                year,
+                month,
+                start_date: datePromptModal.date
+            }, {
+                preserveState: true,
+                preserveScroll: true,
+                onSuccess: () => {
+                    setSelectedWorkers([]);
+                    setDatePromptModal({ ...datePromptModal, isOpen: false });
+                }
+            });
+        } else if (datePromptModal.action === 'remove') {
+            router.delete(route('shifts.schedules.remove', { schedule: datePromptModal.scheduleId, worker: datePromptModal.workerId }), {
+                data: {
+                    end_date: datePromptModal.date,
+                    force_delete: forceDelete
+                },
+                preserveState: true,
+                preserveScroll: true,
+                onSuccess: () => setDatePromptModal({ ...datePromptModal, isOpen: false })
+            });
+        }
+    };
+
     // Navigation
     const isPrevMonthDisabled = year < minYear || (year === minYear && month <= minMonth);
     const isNextMonthDisabled = year > maxYear || (year === maxYear && month >= maxMonth);
@@ -79,17 +128,15 @@ export default function Groups({ year, month, schedules, unassignedWorkers, minY
     };
 
     const handleRemoveWorker = (scheduleId, workerId) => {
-        askConfirm({
-            title: '¿Quitar trabajador del grupo?',
-            message: 'Sus turnos en la cuadrícula dejarán de mostrarse para este grupo.',
-            variant: 'danger',
-            confirmLabel: 'Quitar',
-            onConfirm: () => {
-                router.delete(route('shifts.schedules.remove', { schedule: scheduleId, worker: workerId }), {
-                    preserveState: true,
-                    preserveScroll: true,
-                });
-            }
+        setDatePromptModal({
+            isOpen: true,
+            action: 'remove',
+            scheduleId,
+            workerId,
+            workerIds: [],
+            date: getTodayDateString(),
+            title: 'Desvincular del Grupo',
+            message: '¿Indica la fecha en que el trabajador deja este turno para mantener su historial achurado en la grilla visual?'
         });
     };
 
@@ -156,10 +203,16 @@ export default function Groups({ year, month, schedules, unassignedWorkers, minY
         if (data) {
             const workerIds = JSON.parse(data);
             if (workerIds.length > 0) {
-                router.post(route('shifts.groups.assign', scheduleId), { worker_ids: workerIds }, {
-                    preserveState: true,
-                    preserveScroll: true,
-                    onSuccess: () => setSelectedWorkers([])
+                const schedule = schedules.find(s => s.id === scheduleId);
+                setDatePromptModal({
+                    isOpen: true,
+                    action: 'assign',
+                    scheduleId,
+                    workerIds,
+                    workerId: null,
+                    date: getTodayDateString(),
+                    title: 'Asignar a ' + (schedule?.name || 'Nuevo Turno'),
+                    message: `¿A partir de qué fecha comienza a regir esta nueva programación? (La anterior quedará achurada como historial)`
                 });
             }
         }
@@ -478,6 +531,11 @@ export default function Groups({ year, month, schedules, unassignedWorkers, minY
                                     </div>
                                     <p className="col-span-2 text-[11px] text-[#9CA3AF] leading-tight">
                                         Al asignar un trabajador a este grupo se llenará un patrón recurrente de <strong>{newSchedule.workDays}</strong> días de trabajo seguidos de <strong>{newSchedule.restDays}</strong> días de descanso.
+                                        {newSchedule.workDays === 5 && newSchedule.restDays === 2 && (
+                                            <span className="block mt-1 text-indigo-500 font-bold">
+                                                * Regla Especial 5x2: El descanso siempre caerá automáticamente en Sábado y Domingo.
+                                            </span>
+                                        )}
                                     </p>
                                 </div>
                             </div>
@@ -492,6 +550,62 @@ export default function Groups({ year, month, schedules, unassignedWorkers, minY
                                     className="px-4 py-2 text-[13px] font-bold text-white bg-[#5340FF] hover:bg-[#4330E0] rounded-xl transition disabled:opacity-50"
                                 >
                                     {editingScheduleId ? 'Guardar Cambios' : 'Guardar Grupo'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal para Fecha de Asignación / Remoción */}
+            {datePromptModal.isOpen && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="px-5 py-4 border-b border-[#EAECF0] bg-gray-50 flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${datePromptModal.action === 'assign' ? 'bg-[#5340FF]/10 text-[#5340FF]' : 'bg-red-100 text-red-500'}`}>
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20ZM11 7H13V13H11V7ZM11 15H13V17H11V15Z"></path></svg>
+                            </div>
+                            <h3 className="text-[16px] font-extrabold text-[#111827]">{datePromptModal.title}</h3>
+                        </div>
+                        <div className="p-5">
+                            <p className="text-[13px] text-[#4B5563] mb-4">
+                                {datePromptModal.message}
+                            </p>
+
+                            <div>
+                                <label className="block text-[12px] font-bold text-[#374151] mb-1.5 focus-within:text-[#5340FF] transition-colors">
+                                    {datePromptModal.action === 'assign' ? 'Fecha de Inicio del Nuevo Turno' : 'Fecha de Término del Turno Actual'}
+                                </label>
+                                <input
+                                    type="date"
+                                    className="w-full text-[14px] px-3 py-2 border border-[#D1D5DB] rounded-xl focus:ring-2 focus:ring-[#5340FF]/20 focus:border-[#5340FF] bg-gray-50 hover:bg-white transition-all outline-none"
+                                    value={datePromptModal.date}
+                                    onChange={(e) => setDatePromptModal({ ...datePromptModal, date: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="flex flex-col gap-2 mt-6 pt-4 border-t border-[#EAECF0]">
+                                <button
+                                    onClick={() => confirmDatePrompt(false)}
+                                    className={`w-full px-4 py-2 text-white rounded-xl text-[13px] font-bold transition shadow-sm ${datePromptModal.action === 'assign' ? 'bg-[#5340FF] hover:bg-[#4330E0] shadow-indigo-200' : 'bg-amber-500 hover:bg-amber-600 shadow-amber-200'}`}
+                                >
+                                    {datePromptModal.action === 'assign' ? 'Asignar (Guardando Historial)' : 'Finalizar Turno (Guardando Historial)'}
+                                </button>
+
+                                {datePromptModal.action === 'remove' && (
+                                    <button
+                                        onClick={() => confirmDatePrompt(true)}
+                                        className="w-full px-4 py-2 bg-white border border-red-200 text-red-500 hover:bg-red-50 hover:border-red-300 rounded-xl text-[13px] font-bold transition shadow-sm relative overflow-hidden group"
+                                    >
+                                        <span className="relative z-10 group-hover:text-red-700">Borrar Completamente (Sin Historial)</span>
+                                    </button>
+                                )}
+
+                                <button
+                                    onClick={() => setDatePromptModal({ ...datePromptModal, isOpen: false })}
+                                    className="w-full px-4 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl text-[13px] font-bold transition shadow-sm mt-1"
+                                >
+                                    Cancelar Operación
                                 </button>
                             </div>
                         </div>

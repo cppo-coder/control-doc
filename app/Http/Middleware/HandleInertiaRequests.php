@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -29,18 +30,32 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $user = $request->user();
+
+        $authUser = null;
+        if ($user) {
+            $authUser = Cache::remember(
+                "inertia.auth-meta.{$user->id}",
+                now()->addMinutes(5),
+                fn () => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'roles' => $user->getRoleNames()->values()->all(),
+                    'permissions' => $user->getAllPermissions()->pluck('name')->values()->all(),
+                ]
+            );
+        }
+
         return [
             ...parent::share($request),
             'auth' => [
-                // Solo campos necesarios — evita serializar password hash, remember_token, etc.
-                'user' => $request->user()?->only([
-                    'id', 'name', 'email', 'email_verified_at',
-                ]),
+                'user' => $authUser,
             ],
             // Flash messages globales para toasts
             'flash' => [
                 'success' => $request->session()->get('success'),
-                'error'   => $request->session()->get('error'),
+                'error' => $request->session()->get('error'),
             ],
         ];
     }
